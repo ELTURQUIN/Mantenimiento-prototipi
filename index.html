@@ -361,13 +361,14 @@ tr:hover{background:#f9fafb}
     <div class="form-group" style="margin-bottom:14px">
       <label>Anon / Public key</label>
       <input type="password" id="supaKey" placeholder="eyJhbGciOi...">
-      <span class="form-hint">La clave "anon public" (no la "service_role")</span>
+      <span class="form-hint">Usa la Publishable key / anon public. Nunca uses service_role ni Secret key.</span>
     </div>
 
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
       <button class="btn btn-primary" onclick="saveCloudConfig()">💾 Guardar y conectar</button>
       <button class="btn btn-secondary" onclick="manualSync()">🔄 Sincronizar ahora</button>
       <button class="btn btn-secondary" onclick="pullFromCloud()">⬇ Traer datos de la nube</button>
+      <button class="btn btn-secondary" onclick="restoreBaseUnits()">🚚 Restaurar 6 unidades base</button>
       <button class="btn btn-danger" onclick="disconnectCloud()">Desconectar</button>
     </div>
 
@@ -390,10 +391,11 @@ alter table flotacontrol disable row level security;</pre>
         <p style="margin-top:12px"><strong>5.</strong> Ve a <strong>Settings → API</strong> y copia:</p>
         <ul style="margin-left:20px">
           <li><strong>Project URL</strong> → péguelo arriba en "URL del proyecto"</li>
-          <li><strong>anon public key</strong> → péguelo en "Anon / Public key"</li>
+          <li><strong>Publishable key / anon public key</strong> → péguelo en "Anon / Public key"</li>
         </ul>
-        <p><strong>6.</strong> Presiona "💾 Guardar y conectar" arriba.</p>
-        <p><strong>7.</strong> En tu celular abre la misma página, ve a ☁ Nube y pega los mismos datos. ¡Listo!</p>
+        <p><strong>6.</strong> Presiona "💾 Guardar y conectar". Este botón solo conecta: no borra ni reemplaza datos.</p>
+        <p><strong>7.</strong> Para subir lo que tengas en este dispositivo usa "🔄 Sincronizar ahora". La sincronización combina registros y nunca borra la nube por estar vacío un dispositivo.</p>
+        <p><strong>8.</strong> En tu celular abre la misma página y pega los mismos datos. Los cambios remotos se actualizarán automáticamente.</p>
         <p style="margin-top:10px;padding:8px;background:#fef3c7;border-radius:6px">
           ⚠ <strong>Importante:</strong> Como no usamos autenticación (para simplicidad), cualquiera con tu URL + anon key podría leer/escribir. Úsalo solo para uso personal y no compartas las credenciales.
         </p>
@@ -647,19 +649,41 @@ function saveDB(){
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
 /* Datos iniciales: las 6 unidades reales del usuario */
-function seedData(){
-  db.units = [
-    {id:uid(), plate:'AYL-775', type:'Camión', brand:'Hyundai',  model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:10000, oilCaja:0},
-    {id:uid(), plate:'BMD-919', type:'Camión', brand:'JAC',      model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:10000, oilCaja:0},
-    {id:uid(), plate:'CEP-842', type:'Camión', brand:'JAC',      model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:5000,  oilCaja:0},
-    {id:uid(), plate:'BPG-895', type:'Camión', brand:'JAC',      model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:5000,  oilCaja:0},
-    {id:uid(), plate:'CBB-918', type:'Camión', brand:'HOWO',     model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:10000, oilCaja:0},
-    {id:uid(), plate:'AEB-750', type:'Camión', brand:'Shinerey', model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:5000,  oilCaja:0}
+function getBaseUnits(){
+  return [
+    {plate:'AYL-775', type:'Camión', brand:'Hyundai',  model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:10000, oilCaja:0},
+    {plate:'BMD-919', type:'Camión', brand:'JAC',      model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:10000, oilCaja:0},
+    {plate:'CEP-842', type:'Camión', brand:'JAC',      model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:5000,  oilCaja:0},
+    {plate:'BPG-895', type:'Camión', brand:'JAC',      model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:5000,  oilCaja:0},
+    {plate:'CBB-918', type:'Camión', brand:'HOWO',     model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:10000, oilCaja:0},
+    {plate:'AEB-750', type:'Camión', brand:'Shinerey', model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:5000,  oilCaja:0}
   ];
+}
+
+function seedData(){
+  db.units = getBaseUnits().map(u=>({id:uid(), ...u}));
   db.maintenance = [];
   db.tires = [];
   db.docs = [];
   saveDB();
+}
+
+/* Recupera solo las unidades base que falten, sin borrar mantenimientos ni otros datos. */
+function restoreBaseUnits(){
+  const existingPlates = new Set((db.units||[]).map(u=>(u.plate||'').trim().toUpperCase()));
+  let added = 0;
+  for(const base of getBaseUnits()){
+    if(!existingPlates.has(base.plate.toUpperCase())){
+      db.units.push({id:uid(), ...base});
+      existingPlates.add(base.plate.toUpperCase());
+      added++;
+    }
+  }
+  saveDB();
+  renderAll();
+  alert(added
+    ? `✓ Se restauraron ${added} unidad(es). Ahora tienes ${db.units.length} unidad(es).`
+    : '✓ Las 6 unidades base ya están presentes; no se agregó ningún duplicado.');
 }
 /* Recargar unidades reales borrando todo (accesible desde consola: resetToMyUnits()) */
 function resetToMyUnits(){
@@ -771,13 +795,23 @@ function saveUnit(e){
   }
   saveDB(); closeModal('unitModal'); renderAll();
 }
-function deleteUnit(id){
+async function deleteUnit(id){
   if(!confirm('¿Seguro que deseas eliminar este registro?\n\nSe eliminarán también sus mantenimientos, llantas y documentos asociados.')) return;
+  const childIds = [
+    ...db.maintenance.filter(m=>m.unitId===id).map(x=>x.id),
+    ...db.tires.filter(t=>t.unitId===id).map(x=>x.id),
+    ...db.docs.filter(d=>d.unitId===id).map(x=>x.id)
+  ];
   db.units = db.units.filter(u=>u.id!==id);
   db.maintenance = db.maintenance.filter(m=>m.unitId!==id);
   db.tires = db.tires.filter(t=>t.unitId!==id);
   db.docs = db.docs.filter(d=>d.unitId!==id);
-  saveDB(); renderAll();
+  localStorage.setItem(STORE_KEY, JSON.stringify(db));
+  renderAll();
+  if(supa){
+    await Promise.all([...childIds, id].map(deleteCloudRecord));
+    schedulePull();
+  }
 }
 
 /* ============================================================
@@ -937,10 +971,12 @@ function saveMaint(e){
   }
   saveDB(); closeModal('maintModal'); renderAll();
 }
-function deleteMaint(id){
+async function deleteMaint(id){
   if(!confirm('¿Seguro que deseas eliminar este registro?')) return;
   db.maintenance = db.maintenance.filter(m=>m.id!==id);
-  saveDB(); renderAll();
+  localStorage.setItem(STORE_KEY, JSON.stringify(db));
+  renderAll();
+  if(supa){ await deleteCloudRecord(id); schedulePull(); }
 }
 
 /* ============================================================
@@ -982,10 +1018,12 @@ function saveTire(e){
   else { db.tires.push({id:uid(), ...data}); }
   saveDB(); closeModal('tireModal'); renderAll();
 }
-function deleteTire(id){
+async function deleteTire(id){
   if(!confirm('¿Seguro que deseas eliminar este registro?')) return;
   db.tires = db.tires.filter(t=>t.id!==id);
-  saveDB(); renderAll();
+  localStorage.setItem(STORE_KEY, JSON.stringify(db));
+  renderAll();
+  if(supa){ await deleteCloudRecord(id); schedulePull(); }
 }
 
 /* ============================================================
@@ -1089,10 +1127,12 @@ function saveDoc(e){
     alert('⚠ No se pudo guardar. El archivo puede ser demasiado grande para el almacenamiento del navegador.\n\n' + err.message);
   }
 }
-function deleteDoc(id){
+async function deleteDoc(id){
   if(!confirm('¿Seguro que deseas eliminar este registro?')) return;
   db.docs = db.docs.filter(d=>d.id!==id);
-  saveDB(); renderAll();
+  localStorage.setItem(STORE_KEY, JSON.stringify(db));
+  renderAll();
+  if(supa){ await deleteCloudRecord(id); schedulePull(); }
 }
 
 function fillUnitSelect(selectId){
@@ -1678,12 +1718,20 @@ function printCurrentView(){
   window.print();
 }
 /* ============================================================
-   SUPABASE - SINCRONIZACIÓN EN LA NUBE
+   SUPABASE - SINCRONIZACIÓN EN LA NUBE (MODO SEGURO)
+   - Supabase actúa como punto central.
+   - Un dispositivo vacío NUNCA borra datos remotos.
+   - "Sincronizar ahora" hace UPSERT/mezcla; no borra.
+   - Los borrados hechos desde la app sí se envían explícitamente.
+   - Realtime actualiza otros dispositivos cuando hay cambios.
    ============================================================ */
 const CFG_KEY = 'flotaControl_supabase';
 let supa = null;
 let syncTimer = null;
+let pullTimer = null;
 let isSyncing = false;
+let isPulling = false;
+let realtimeChannel = null;
 
 function getCloudConfig(){
   try { return JSON.parse(localStorage.getItem(CFG_KEY)||'{}'); } catch(e){ return {}; }
@@ -1700,8 +1748,10 @@ function initSupabase(){
   try {
     supa = window.supabase.createClient(cfg.url, cfg.key);
     setCloudDot('ok');
+    startRealtime();
     return supa;
   } catch(e){
+    supa = null;
     setCloudDot('error', e.message);
     return null;
   }
@@ -1711,10 +1761,10 @@ function setCloudDot(state, msg){
   const dot = document.getElementById('cloudDot');
   const label = document.getElementById('cloudLabel');
   const map = {
-    off:   {c:'#9ca3af', t:'Nube'},
-    ok:    {c:'#16a34a', t:'Nube'},
+    off:     {c:'#9ca3af', t:'Nube'},
+    ok:      {c:'#16a34a', t:'Nube'},
     syncing: {c:'#f59e0b', t:'Sincro...'},
-    error: {c:'#dc2626', t:'Error'}
+    error:   {c:'#dc2626', t:'Error'}
   };
   const s = map[state]||map.off;
   dot.style.background = s.c;
@@ -1729,40 +1779,51 @@ function openCloudModal(){
   updateCloudStatusText();
   openModal('cloudModal');
 }
+
 function updateCloudStatusText(){
   const el = document.getElementById('cloudStatus');
   const cfg = getCloudConfig();
   if(!cfg.url || !cfg.key){
-    el.innerHTML = '⚪ <strong>Sin conectar.</strong> Sigue las instrucciones abajo para configurar.';
+    el.innerHTML = '⚪ <strong>Sin conectar.</strong> Ingresa la URL y la Publishable key.';
     el.style.background = '#f3f4f6';
   } else if(supa){
-    el.innerHTML = '🟢 <strong>Conectado.</strong> Los cambios se sincronizan automáticamente.';
+    el.innerHTML = '🟢 <strong>Conectado.</strong> Supabase es la nube central. Los cambios se sincronizan sin borrar datos por accidente.';
     el.style.background = '#dcfce7';
   } else {
-    el.innerHTML = '🔴 <strong>Error de conexión.</strong> Revisa las credenciales.';
+    el.innerHTML = '🔴 <strong>Error de conexión.</strong> Revisa las credenciales o la conexión a Internet.';
     el.style.background = '#fee2e2';
   }
 }
 
+/* Guardar credenciales SOLO conecta. Ya no sube ni baja datos automáticamente. */
 async function saveCloudConfig(){
-  const url = document.getElementById('supaUrl').value.trim();
+  const url = document.getElementById('supaUrl').value.trim().replace(/\/+$/,'');
   const key = document.getElementById('supaKey').value.trim();
   if(!url || !key){ alert('Debes ingresar URL y clave.'); return; }
+
   setCloudConfig({url, key});
   initSupabase();
-  updateCloudStatusText();
-  // Preguntar si quiere traer datos existentes de la nube
-  if(supa){
-    if(confirm('Conectado ✓\n\n¿Quieres traer los datos que ya tengas en la nube? (Esto reemplazará los datos locales.)\n\nSi es tu primera vez o quieres subir tus datos actuales, presiona Cancelar y luego "🔄 Sincronizar ahora".')){
-      await pullFromCloud();
-    } else {
-      await manualSync();
-    }
+  if(!supa){ updateCloudStatusText(); return; }
+
+  setCloudDot('syncing');
+  try {
+    const {error} = await supa.from('flotacontrol').select('id').limit(1);
+    if(error) throw error;
+    setCloudDot('ok');
+    updateCloudStatusText();
+    alert('✓ Conectado correctamente.\n\nNo se ha borrado ni reemplazado ningún dato.\n\nUsa "🔄 Sincronizar ahora" para subir/combinar los datos de este dispositivo.');
+  } catch(e){
+    console.error('Connection test error:', e);
+    supa = null;
+    setCloudDot('error', e.message);
+    updateCloudStatusText();
+    alert('No se pudo conectar con Supabase:\n' + e.message);
   }
 }
 
 function disconnectCloud(){
   if(!confirm('¿Desconectar de Supabase? Los datos locales se conservan.')) return;
+  stopRealtime();
   localStorage.removeItem(CFG_KEY);
   supa = null;
   setCloudDot('off');
@@ -1774,83 +1835,178 @@ function copySql(){
   navigator.clipboard.writeText(t).then(()=>alert('✓ SQL copiado al portapapeles'));
 }
 
-/* ---- Sincronización ---- */
-/* Programa un sync automático diferido (debounce) para no sobrecargar */
+/* ---- Sincronización segura ---- */
 function scheduleSync(){
   if(!supa) return;
   if(syncTimer) clearTimeout(syncTimer);
-  syncTimer = setTimeout(()=>{ syncToCloud(); }, 1500);
+  syncTimer = setTimeout(()=>{ syncToCloud(); }, 1200);
 }
 
-/* Sube todos los datos locales a la nube (full sync) */
+function schedulePull(){
+  if(!supa || isSyncing || isPulling) return;
+  if(pullTimer) clearTimeout(pullTimer);
+  pullTimer = setTimeout(()=>{ pullFromCloudSilent(); }, 900);
+}
+
+/* Sube/actualiza registros locales. IMPORTANTE: nunca borra registros remotos ausentes localmente. */
 async function syncToCloud(){
-  if(!supa || isSyncing) return;
+  if(!supa || isSyncing) return false;
   isSyncing = true;
   setCloudDot('syncing');
+
   try {
     const entities = ['units','maintenance','tires','docs'];
     for(const entity of entities){
       const local = db[entity] || [];
-      const localIds = new Set(local.map(r=>r.id));
-      // Obtener IDs remotos
-      const {data: remote, error: e1} = await supa.from('flotacontrol').select('id').eq('entity', entity);
-      if(e1) throw e1;
-      // Borrar los que ya no existen localmente
-      const toDelete = (remote||[]).filter(r=>!localIds.has(r.id)).map(r=>r.id);
-      if(toDelete.length){
-        const {error: e2} = await supa.from('flotacontrol').delete().in('id', toDelete);
-        if(e2) throw e2;
-      }
-      // Upsert de todos los registros locales
-      if(local.length){
-        const rows = local.map(r=>({id:r.id, entity, data:r, updated_at:new Date().toISOString()}));
-        const {error: e3} = await supa.from('flotacontrol').upsert(rows);
-        if(e3) throw e3;
-      }
+      if(!local.length) continue; // un dispositivo vacío no toca la nube
+
+      const now = new Date().toISOString();
+      const rows = local.map(r=>({
+        id:r.id,
+        entity,
+        data:r,
+        updated_at:now
+      }));
+
+      const {error} = await supa.from('flotacontrol').upsert(rows, {onConflict:'id'});
+      if(error) throw error;
     }
+
     setCloudDot('ok');
     updateCloudStatusText();
+    return true;
   } catch(e){
     console.error('Sync error:', e);
     setCloudDot('error', e.message);
     updateCloudStatusText();
+    return false;
   } finally {
     isSyncing = false;
   }
 }
 
-/* Trae todos los datos de la nube y reemplaza los locales */
+/* Descarga completa. Si la nube está vacía, conserva los datos locales. */
+async function fetchCloudData(){
+  if(!supa) throw new Error('No hay conexión configurada.');
+  const {data, error} = await supa.from('flotacontrol').select('*').order('updated_at', {ascending:true});
+  if(error) throw error;
+  return data || [];
+}
+
+function applyCloudData(data){
+  if(!data || data.length===0) return false;
+
+  db.units       = data.filter(r=>r.entity==='units').map(r=>r.data);
+  db.maintenance = data.filter(r=>r.entity==='maintenance').map(r=>r.data);
+  db.tires       = data.filter(r=>r.entity==='tires').map(r=>r.data);
+  db.docs        = data.filter(r=>r.entity==='docs').map(r=>r.data);
+
+  localStorage.setItem(STORE_KEY, JSON.stringify(db));
+  renderAll();
+  return true;
+}
+
 async function pullFromCloud(){
   if(!supa){ alert('No hay conexión configurada.'); return; }
+  if(isPulling) return;
+  isPulling = true;
   setCloudDot('syncing');
+
   try {
-    const {data, error} = await supa.from('flotacontrol').select('*');
-    if(error) throw error;
-    db.units       = (data||[]).filter(r=>r.entity==='units').map(r=>r.data);
-    db.maintenance = (data||[]).filter(r=>r.entity==='maintenance').map(r=>r.data);
-    db.tires       = (data||[]).filter(r=>r.entity==='tires').map(r=>r.data);
-    db.docs        = (data||[]).filter(r=>r.entity==='docs').map(r=>r.data);
-    // Guardar en localStorage sin re-disparar sync
-    localStorage.setItem(STORE_KEY, JSON.stringify(db));
-    renderAll();
+    const data = await fetchCloudData();
+    if(data.length===0){
+      setCloudDot('ok');
+      updateCloudStatusText();
+      alert('ℹ La nube está vacía. Tus datos locales se conservaron; no se borró nada.');
+      return;
+    }
+    applyCloudData(data);
     setCloudDot('ok');
     updateCloudStatusText();
     alert('✓ Datos traídos de la nube correctamente.');
   } catch(e){
-    console.error(e);
+    console.error('Pull error:', e);
     setCloudDot('error', e.message);
+    updateCloudStatusText();
     alert('Error al traer datos: ' + e.message);
+  } finally {
+    isPulling = false;
   }
 }
 
-async function manualSync(){
-  if(!supa){ alert('Primero configura y guarda las credenciales.'); return; }
-  await syncToCloud();
-  alert('✓ Sincronización completada.');
+async function pullFromCloudSilent(){
+  if(!supa || isPulling || isSyncing) return;
+  isPulling = true;
+  try {
+    const data = await fetchCloudData();
+    if(data.length>0) applyCloudData(data);
+    setCloudDot('ok');
+  } catch(e){
+    console.warn('Silent pull error:', e.message);
+    setCloudDot('error', e.message);
+  } finally {
+    isPulling = false;
+  }
 }
 
-/* Sync automático al recuperar conexión */
-window.addEventListener('online', ()=>{ if(supa) scheduleSync(); });
+/* Sincronización manual = subir/combinar, luego leer el resultado central. */
+async function manualSync(){
+  if(!supa){ alert('Primero configura y guarda las credenciales.'); return; }
+  const ok = await syncToCloud();
+  if(ok){
+    await pullFromCloudSilent();
+    alert('✓ Sincronización completada sin borrar datos remotos.');
+  } else {
+    alert('No se pudo completar la sincronización. Revisa el indicador de Nube.');
+  }
+}
+
+/* Borrado explícito: solo se ejecuta cuando el usuario pulsa Eliminar en la app. */
+async function deleteCloudRecord(id){
+  if(!supa || !id) return;
+  try {
+    const {error} = await supa.from('flotacontrol').delete().eq('id', id);
+    if(error) throw error;
+    setCloudDot('ok');
+  } catch(e){
+    console.warn('No se pudo borrar en la nube:', e.message);
+    setCloudDot('error', e.message);
+  }
+}
+
+/* Realtime: cuando otro dispositivo cambia Supabase, actualizar este navegador. */
+function stopRealtime(){
+  if(realtimeChannel && supa){
+    try { supa.removeChannel(realtimeChannel); } catch(e){}
+  }
+  realtimeChannel = null;
+}
+
+function startRealtime(){
+  if(!supa || !supa.channel) return;
+  stopRealtime();
+
+  try {
+    realtimeChannel = supa
+      .channel('flotacontrol-live')
+      .on('postgres_changes',
+          {event:'*', schema:'public', table:'flotacontrol'},
+          ()=>schedulePull())
+      .subscribe(status=>{
+        if(status==='SUBSCRIBED') setCloudDot('ok');
+      });
+  } catch(e){
+    console.warn('Realtime no disponible:', e.message);
+  }
+}
+
+/* Al recuperar Internet, primero sube los cambios locales y luego refresca. */
+window.addEventListener('online', async ()=>{
+  if(!supa) return;
+  const ok = await syncToCloud();
+  if(ok) schedulePull();
+});
+
 
 /* ============================================================
    EXPORTAR / IMPORTAR RESPALDO JSON
@@ -1885,30 +2041,22 @@ function importBackup(e){
    ============================================================ */
 loadDB();
 renderAll();
-// Iniciar Supabase después de renderizar (para que el indicador esté disponible)
 initSupabase();
-// Si hay conexión configurada, traer datos remotos automáticamente al abrir
+
+/* Si la nube ya tiene datos, se usa como copia central.
+   Si está vacía, se conservan intactos los datos locales. */
 if(supa){
   (async ()=>{
     try {
-      const {data, error} = await supa.from('flotacontrol').select('*').limit(1);
-      if(error) throw error;
-      // Solo tirar de la nube si hay datos ahí
-      const {data: allData} = await supa.from('flotacontrol').select('*');
-      if(allData && allData.length > 0){
-        db.units       = allData.filter(r=>r.entity==='units').map(r=>r.data);
-        db.maintenance = allData.filter(r=>r.entity==='maintenance').map(r=>r.data);
-        db.tires       = allData.filter(r=>r.entity==='tires').map(r=>r.data);
-        db.docs        = allData.filter(r=>r.entity==='docs').map(r=>r.data);
-        localStorage.setItem(STORE_KEY, JSON.stringify(db));
-        renderAll();
+      const data = await fetchCloudData();
+      if(data.length>0){
+        applyCloudData(data);
         setCloudDot('ok');
       } else {
-        // La nube está vacía, subir lo local
-        await syncToCloud();
+        setCloudDot('ok');
       }
     } catch(e){
-      console.warn('No se pudo sincronizar al iniciar:', e.message);
+      console.warn('No se pudo leer Supabase al iniciar:', e.message);
       setCloudDot('error', e.message);
     }
   })();
