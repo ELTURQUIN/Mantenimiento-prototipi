@@ -1,0 +1,1918 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de Mantenimiento Vehicular</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ============ RESET Y BASE ============ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f4f6fa;--surface:#fff;--border:#e5e8ef;--text:#1f2937;--muted:#6b7280;
+  --primary:#2563eb;--primary-hover:#1d4ed8;--danger:#dc2626;--danger-hover:#b91c1c;
+  --success:#16a34a;--warning:#f59e0b;--sidebar:#111827;--sidebar-text:#e5e7eb;
+  --sidebar-active:#2563eb;--shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+  --radius:10px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,sans-serif;
+  background:var(--bg);color:var(--text);line-height:1.5;min-height:100vh}
+
+/* ============ LAYOUT ============ */
+.app{display:flex;min-height:100vh}
+.sidebar{width:240px;background:var(--sidebar);color:var(--sidebar-text);
+  padding:20px 0;position:fixed;height:100vh;overflow-y:auto;z-index:100;transition:transform .3s}
+.sidebar-brand{padding:0 20px 20px;border-bottom:1px solid #1f2937;margin-bottom:10px}
+.sidebar-brand h1{font-size:18px;color:#fff}
+.sidebar-brand p{font-size:12px;color:#9ca3af;margin-top:4px}
+.nav-item{display:flex;align-items:center;gap:12px;padding:12px 20px;cursor:pointer;
+  color:var(--sidebar-text);border:none;background:none;width:100%;text-align:left;
+  font-size:14px;transition:background .2s}
+.nav-item:hover{background:#1f2937}
+.nav-item.active{background:var(--sidebar-active);color:#fff}
+.nav-icon{font-size:18px;width:20px;text-align:center}
+
+.main{flex:1;margin-left:240px;padding:24px;padding-bottom:80px}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;gap:12px;flex-wrap:wrap}
+.page-title{font-size:24px;font-weight:600}
+.topbar-actions{display:flex;gap:8px;flex-wrap:wrap}
+.menu-toggle{display:none;background:var(--sidebar);color:#fff;border:none;padding:8px 12px;
+  border-radius:6px;font-size:18px;cursor:pointer}
+
+/* ============ BÚSQUEDA ============ */
+.search-box{position:relative;flex:1;max-width:400px;min-width:200px}
+.search-box input{width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);
+  border-radius:8px;font-size:14px;background:#fff}
+.search-box::before{content:'🔍';position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:14px}
+
+/* ============ BOTONES ============ */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border:none;border-radius:8px;
+  font-size:14px;font-weight:500;cursor:pointer;transition:all .15s;text-decoration:none}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-hover)}
+.btn-secondary{background:#e5e7eb;color:#374151}
+.btn-secondary:hover{background:#d1d5db}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-danger:hover{background:var(--danger-hover)}
+.btn-sm{padding:5px 10px;font-size:12px}
+
+/* ============ TARJETAS DASHBOARD ============ */
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:var(--surface);padding:18px;border-radius:var(--radius);box-shadow:var(--shadow);
+  border-left:4px solid var(--primary)}
+.stat-card.warning{border-left-color:var(--warning)}
+.stat-card.danger{border-left-color:var(--danger)}
+.stat-card.success{border-left-color:var(--success)}
+.stat-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.stat-value{font-size:28px;font-weight:700;margin-top:6px}
+.stat-sub{font-size:12px;color:var(--muted);margin-top:4px}
+
+/* ============ TARJETAS Y TABLAS ============ */
+.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:20px;margin-bottom:20px}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.card-title{font-size:16px;font-weight:600}
+
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
+th{background:#f9fafb;font-weight:600;color:#374151;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+tr:hover{background:#f9fafb}
+.table-actions{display:flex;gap:6px}
+
+/* ============ BADGES ESTADO ============ */
+.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;text-transform:uppercase}
+.badge-ok{background:#dcfce7;color:#166534}
+.badge-warn{background:#fef3c7;color:#92400e}
+.badge-danger{background:#fee2e2;color:#991b1b}
+.badge-info{background:#dbeafe;color:#1e40af}
+.badge-gray{background:#e5e7eb;color:#374151}
+
+/* Semáforo */
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.dot-green{background:var(--success)}
+.dot-yellow{background:var(--warning)}
+.dot-red{background:var(--danger)}
+
+/* ============ GRID UNIDADES ============ */
+.units-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.unit-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:16px;border-top:3px solid var(--primary)}
+.unit-plate{font-size:18px;font-weight:700;letter-spacing:1px}
+.unit-info{color:var(--muted);font-size:13px;margin:4px 0 10px}
+.unit-km{font-size:20px;font-weight:600;margin:8px 0}
+.unit-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+
+/* ============ MODAL ============ */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;
+  justify-content:center;z-index:1000;padding:16px}
+.modal-backdrop.active{display:flex}
+.modal{background:#fff;border-radius:12px;max-width:600px;width:100%;max-height:90vh;
+  overflow-y:auto;padding:24px;box-shadow:0 20px 40px rgba(0,0,0,.2)}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.modal-title{font-size:18px;font-weight:600}
+.modal-close{background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted)}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
+
+/* ============ FORMULARIOS ============ */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-grid .full{grid-column:1/-1}
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-group label{font-size:13px;font-weight:500;color:#374151}
+.form-group input,.form-group select,.form-group textarea{
+  padding:9px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;
+  font-family:inherit;background:#fff}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{
+  outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.form-group textarea{resize:vertical;min-height:60px}
+.form-hint{font-size:11px;color:var(--muted)}
+.cost-total{background:#eff6ff;padding:12px;border-radius:6px;text-align:center;font-weight:600;
+  color:var(--primary);font-size:16px}
+
+/* ============ FAB ============ */
+.fab{position:fixed;bottom:20px;right:20px;background:var(--primary);color:#fff;border:none;
+  padding:14px 20px;border-radius:30px;font-weight:600;font-size:14px;cursor:pointer;
+  box-shadow:0 4px 12px rgba(37,99,235,.4);z-index:99;display:none}
+.fab:hover{background:var(--primary-hover)}
+
+/* ============ ALERTAS INLINE ============ */
+.km-status{font-size:12px;font-weight:600;margin-top:4px}
+.km-status.ok{color:var(--success)}
+.km-status.warn{color:var(--warning)}
+.km-status.danger{color:var(--danger)}
+
+.empty{text-align:center;padding:40px 20px;color:var(--muted)}
+
+/* ============ RESPONSIVE ============ */
+@media (max-width:768px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .main{margin-left:0;padding:16px;padding-bottom:100px}
+  .menu-toggle{display:inline-block}
+  .fab{display:inline-block}
+  .form-grid{grid-template-columns:1fr}
+  .page-title{font-size:20px}
+  .stat-value{font-size:22px}
+  .modal{padding:18px}
+  th,td{padding:8px}
+}
+
+.sections>section{display:none}
+.sections>section.active{display:block}
+
+/* ============ FILTROS DE FECHA ============ */
+.date-filters{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:14px;padding:12px;background:#f9fafb;border-radius:8px}
+.date-filters .form-group{flex:1;min-width:140px}
+.date-filters input,.date-filters select{padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px}
+
+/* ============ ESTILOS PARA IMPRESIÓN ============ */
+@media print{
+  body{background:#fff}
+  .sidebar,.topbar,.menu-toggle,.fab,.card-header button,.table-actions,.date-filters button,
+  .modal-backdrop,.topbar-actions{display:none !important}
+  .main{margin-left:0;padding:0}
+  .card{box-shadow:none;border:1px solid #ccc;page-break-inside:avoid}
+  .sections>section{display:block !important}
+  .sections>section:not(.active){display:none !important}
+  table{font-size:11px}
+  th,td{padding:5px}
+  .print-header{display:block !important;text-align:center;margin-bottom:20px;padding-bottom:10px;border-bottom:2px solid #000}
+  .print-header h1{font-size:20px;margin-bottom:5px}
+  .print-header p{font-size:12px;color:#666}
+}
+.print-header{display:none}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ============ SIDEBAR / MENÚ ============ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <h1>🚛 FlotaControl</h1>
+      <p>Mantenimiento vehicular</p>
+    </div>
+    <button class="nav-item active" data-view="dashboard"><span class="nav-icon">🏠</span> Inicio</button>
+    <button class="nav-item" data-view="unidades"><span class="nav-icon">🚚</span> Unidades</button>
+    <button class="nav-item" data-view="mantenimientos"><span class="nav-icon">🔧</span> Mantenimientos</button>
+    <button class="nav-item" data-view="llantas"><span class="nav-icon">🛞</span> Llantas</button>
+    <button class="nav-item" data-view="documentos"><span class="nav-icon">📄</span> Documentos</button>
+    <button class="nav-item" data-view="historial"><span class="nav-icon">📋</span> Historial</button>
+  </aside>
+
+  <!-- ============ CONTENIDO PRINCIPAL ============ -->
+  <main class="main">
+    <!-- Encabezado que solo aparece al imprimir -->
+    <div class="print-header">
+      <h1>🚛 FlotaControl - Reporte de Mantenimiento</h1>
+      <p id="printDateHeader"></p>
+    </div>
+    <div class="topbar">
+      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <h2 class="page-title" id="pageTitle">Inicio</h2>
+      <div class="search-box">
+        <input type="text" id="globalSearch" placeholder="Buscar placa, vehículo, mantenimiento...">
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-secondary btn-sm" onclick="openCloudModal()" title="Sincronización con Supabase">
+          <span id="cloudDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#9ca3af;margin-right:4px"></span>
+          ☁ <span id="cloudLabel">Nube</span>
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="printCurrentView()">🖨 Imprimir</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportBackup()">⬇ Exportar</button>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('importFile').click()">⬆ Importar</button>
+        <input type="file" id="importFile" accept=".json" style="display:none" onchange="importBackup(event)">
+      </div>
+    </div>
+
+    <div class="sections">
+
+      <!-- ============ DASHBOARD ============ -->
+      <section id="view-dashboard" class="active">
+        <div class="stats" id="statsGrid"></div>
+        <div class="card">
+          <div class="card-header"><h3 class="card-title">Últimos mantenimientos registrados</h3></div>
+          <div class="table-wrap" id="latestMaintTable"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3 class="card-title">🛢 Alertas de cambio de aceite</h3></div>
+          <div id="oilAlerts"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3 class="card-title">⚠ Alertas de mantenimiento</h3></div>
+          <div id="alertsList"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3 class="card-title">📄 Documentos por vencer</h3></div>
+          <div id="docsAlerts"></div>
+        </div>
+      </section>
+
+      <!-- ============ UNIDADES ============ -->
+      <section id="view-unidades">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Mis Unidades</h3>
+            <button class="btn btn-primary" onclick="openUnitModal()">+ Agregar unidad</button>
+          </div>
+          <div class="units-grid" id="unitsGrid"></div>
+        </div>
+      </section>
+
+      <!-- ============ MANTENIMIENTOS ============ -->
+      <section id="view-mantenimientos">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Mantenimientos</h3>
+            <button class="btn btn-primary" onclick="openMaintModal()">+ Registrar mantenimiento</button>
+          </div>
+          <div class="table-wrap" id="maintTable"></div>
+        </div>
+      </section>
+
+      <!-- ============ LLANTAS ============ -->
+      <section id="view-llantas">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Control de Llantas</h3>
+            <button class="btn btn-primary" onclick="openTireModal()">+ Agregar llanta</button>
+          </div>
+          <div class="table-wrap" id="tiresTable"></div>
+        </div>
+      </section>
+
+      <!-- ============ DOCUMENTOS ============ -->
+      <section id="view-documentos">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Documentación</h3>
+            <button class="btn btn-primary" onclick="openDocModal()">+ Agregar documento</button>
+          </div>
+          <div class="table-wrap" id="docsTable"></div>
+        </div>
+      </section>
+
+      <!-- ============ HISTORIAL ============ -->
+      <section id="view-historial">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Historial completo (base de datos interna)</h3>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-secondary btn-sm" onclick="printCurrentView()">🖨 Imprimir</button>
+              <button class="btn btn-primary btn-sm" onclick="sendHistoryWhatsApp()">📱 Enviar WhatsApp</button>
+            </div>
+          </div>
+          <!-- Filtros -->
+          <div class="date-filters">
+            <div class="form-group" style="flex:2;min-width:220px">
+              <label>Unidades (selecciona una o varias)</label>
+              <div id="historyUnitCheckboxes" style="display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;padding:8px;background:#fff;border:1px solid var(--border);border-radius:6px"></div>
+              <div style="display:flex;gap:6px;margin-top:4px">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAllHistoryUnits(true)">Marcar todas</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAllHistoryUnits(false)">Desmarcar</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Desde</label>
+              <input type="date" id="historyDateFrom" onchange="renderHistory()">
+            </div>
+            <div class="form-group">
+              <label>Hasta</label>
+              <input type="date" id="historyDateTo" onchange="renderHistory()">
+            </div>
+            <div class="form-group">
+              <label>Tipo</label>
+              <select id="historyTypeFilter" onchange="renderHistory()">
+                <option value="">Todos los tipos</option>
+              </select>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="clearHistoryFilters()">Limpiar</button>
+          </div>
+          <div id="historySummary" style="margin-bottom:12px;padding:10px;background:#eff6ff;border-radius:6px;font-size:14px"></div>
+          <div class="table-wrap" id="historyTable"></div>
+          <div class="card" id="costsBlock" style="margin-top:20px;background:#f9fafb;display:none">
+            <h4 style="margin-bottom:10px">💰 Gastos por unidad seleccionada</h4>
+            <div id="costsByUnit"></div>
+            <h4 style="margin:16px 0 10px">📊 Gastos por tipo de mantenimiento</h4>
+            <div id="costsByType"></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- ============ MODAL SUPABASE / NUBE ============ -->
+<div class="modal-backdrop" id="cloudModal">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <h3 class="modal-title">☁ Sincronización con Supabase</h3>
+      <button class="modal-close" onclick="closeModal('cloudModal')">×</button>
+    </div>
+
+    <div id="cloudStatus" style="padding:10px;border-radius:6px;margin-bottom:14px;font-size:14px"></div>
+
+    <div class="form-group" style="margin-bottom:14px">
+      <label>URL del proyecto Supabase</label>
+      <input type="text" id="supaUrl" placeholder="https://xxxxxxxxxxxx.supabase.co">
+      <span class="form-hint">Se encuentra en tu proyecto → Settings → API</span>
+    </div>
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Anon / Public key</label>
+      <input type="password" id="supaKey" placeholder="eyJhbGciOi...">
+      <span class="form-hint">La clave "anon public" (no la "service_role")</span>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <button class="btn btn-primary" onclick="saveCloudConfig()">💾 Guardar y conectar</button>
+      <button class="btn btn-secondary" onclick="manualSync()">🔄 Sincronizar ahora</button>
+      <button class="btn btn-secondary" onclick="pullFromCloud()">⬇ Traer datos de la nube</button>
+      <button class="btn btn-danger" onclick="disconnectCloud()">Desconectar</button>
+    </div>
+
+    <details style="background:#f9fafb;padding:12px;border-radius:8px">
+      <summary style="cursor:pointer;font-weight:600;font-size:14px">📖 Cómo configurar Supabase (paso a paso)</summary>
+      <div style="margin-top:12px;font-size:13px;line-height:1.6">
+        <p><strong>1.</strong> Entra a <a href="https://supabase.com" target="_blank" style="color:var(--primary)">supabase.com</a> y crea una cuenta gratuita.</p>
+        <p><strong>2.</strong> Crea un nuevo proyecto (elige una contraseña, la región más cercana).</p>
+        <p><strong>3.</strong> Espera 2 minutos hasta que se cree.</p>
+        <p><strong>4.</strong> Ve a <strong>SQL Editor</strong> (icono de terminal en el menú izquierdo) y ejecuta este SQL para crear la tabla:</p>
+        <pre id="sqlSnippet" style="background:#111;color:#0f0;padding:12px;border-radius:6px;overflow-x:auto;font-size:12px;margin:8px 0">create table flotacontrol (
+  id text primary key,
+  entity text not null,
+  data jsonb not null,
+  updated_at timestamptz default now()
+);
+create index on flotacontrol(entity);
+alter table flotacontrol disable row level security;</pre>
+        <button class="btn btn-secondary btn-sm" onclick="copySql()">📋 Copiar SQL</button>
+        <p style="margin-top:12px"><strong>5.</strong> Ve a <strong>Settings → API</strong> y copia:</p>
+        <ul style="margin-left:20px">
+          <li><strong>Project URL</strong> → péguelo arriba en "URL del proyecto"</li>
+          <li><strong>anon public key</strong> → péguelo en "Anon / Public key"</li>
+        </ul>
+        <p><strong>6.</strong> Presiona "💾 Guardar y conectar" arriba.</p>
+        <p><strong>7.</strong> En tu celular abre la misma página, ve a ☁ Nube y pega los mismos datos. ¡Listo!</p>
+        <p style="margin-top:10px;padding:8px;background:#fef3c7;border-radius:6px">
+          ⚠ <strong>Importante:</strong> Como no usamos autenticación (para simplicidad), cualquiera con tu URL + anon key podría leer/escribir. Úsalo solo para uso personal y no compartas las credenciales.
+        </p>
+      </div>
+    </details>
+
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('cloudModal')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Botón flotante móvil -->
+<button class="fab" onclick="openMaintModal()">+ Nuevo mantenimiento</button>
+
+<!-- ============ MODAL UNIDAD ============ -->
+<div class="modal-backdrop" id="unitModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="unitModalTitle">Agregar Unidad</h3>
+      <button class="modal-close" onclick="closeModal('unitModal')">×</button>
+    </div>
+    <form id="unitForm" onsubmit="saveUnit(event)">
+      <input type="hidden" id="unitId">
+      <div class="form-grid">
+        <div class="form-group"><label>Placa *</label><input type="text" id="unitPlate" required style="text-transform:uppercase"></div>
+        <div class="form-group"><label>Tipo de vehículo *</label>
+          <select id="unitType" required>
+            <option value="">Seleccionar...</option>
+            <option>Camión</option><option>Camioneta</option><option>Automóvil</option>
+            <option>Volquete</option><option>Tráiler</option><option>Furgoneta</option>
+            <option>Motocicleta</option><option>Otro</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Marca *</label><input type="text" id="unitBrand" required></div>
+        <div class="form-group"><label>Modelo *</label><input type="text" id="unitModel" required></div>
+        <div class="form-group"><label>Año</label><input type="number" id="unitYear" min="1950" max="2100"></div>
+        <div class="form-group"><label>Capacidad de carga</label><input type="text" id="unitCapacity" placeholder="Ej: 10 TN"></div>
+        <div class="form-group"><label>Kilometraje actual *</label><input type="number" id="unitKm" min="0" required></div>
+        <div class="form-group"><label>Estado *</label>
+          <select id="unitStatus" required>
+            <option value="Operativo">Operativo</option>
+            <option value="En mantenimiento">En mantenimiento</option>
+            <option value="Fuera de servicio">Fuera de servicio</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label style="font-weight:600;color:var(--primary);margin-top:8px">🛢 Intervalos de cambio de aceite (km)</label>
+        </div>
+        <div class="form-group">
+          <label>Intervalo aceite motor (km)</label>
+          <input type="number" id="unitOilMotor" min="0" placeholder="Ej: 10000">
+          <span class="form-hint">Cada cuántos km se hace el cambio</span>
+        </div>
+        <div class="form-group">
+          <label>Intervalo aceite caja y corona (km)</label>
+          <input type="number" id="unitOilCaja" min="0" placeholder="Ej: 40000">
+          <span class="form-hint">Opcional</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('unitModal')">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ MODAL MANTENIMIENTO ============ -->
+<div class="modal-backdrop" id="maintModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="maintModalTitle">Registrar Mantenimiento</h3>
+      <button class="modal-close" onclick="closeModal('maintModal')">×</button>
+    </div>
+    <form id="maintForm" onsubmit="saveMaint(event)">
+      <input type="hidden" id="maintId">
+      <div class="form-grid">
+        <div class="form-group"><label>Unidad *</label>
+          <select id="maintUnit" required onchange="suggestNextKm()"><option value="">Seleccionar...</option></select>
+        </div>
+        <div class="form-group"><label>Fecha *</label><input type="date" id="maintDate" required></div>
+        <div class="form-group"><label>Tipo de mantenimiento *</label>
+          <select id="maintType" required onchange="toggleOtherType();toggleOilFields();toggleKmField()">
+            <option value="">Seleccionar...</option>
+            <option>Cambio de aceite de motor</option>
+            <option>Cambio de aceite caja y corona</option>
+            <option>Filtro de aceite</option>
+            <option>Filtro de aire</option>
+            <option>Filtro de combustible</option>
+            <option>Llantas</option><option>Frenos</option><option>Luces</option>
+            <option>Batería</option><option>Engrase</option><option>Alineamiento</option>
+            <option>Balanceo</option><option>Muelles</option><option>Suspensión</option>
+            <option>Motor</option><option>Caja</option><option>Diferencial</option>
+            <option>Sistema eléctrico</option><option>Reparación general</option>
+            <option>SOAT</option><option>Revisión técnica</option><option>Otro</option>
+          </select>
+        </div>
+        <div class="form-group" id="kmFieldGroup" style="display:none">
+          <label>Kilometraje <span id="kmRequired">*</span></label>
+          <input type="number" id="maintKm" min="0" oninput="suggestNextKm()">
+          <span class="form-hint">Solo requerido en cambios de aceite y filtros</span>
+        </div>
+        <div class="form-group" id="otherTypeGroup" style="display:none">
+          <label>Especificar tipo</label><input type="text" id="maintOtherType">
+        </div>
+
+        <!-- Campos especiales aceite -->
+        <div class="form-group oil-field" style="display:none"><label>Marca de aceite</label><input type="text" id="oilBrand" placeholder="Ej: Mobil, Shell"></div>
+        <div class="form-group oil-field" style="display:none"><label>Viscosidad</label>
+          <input type="text" id="oilViscosity" placeholder="Ej: 15W40, 10W30, 5W30, 80W90">
+        </div>
+        <div class="form-group oil-field" style="display:none"><label>Litros utilizados</label><input type="number" step="0.1" id="oilLiters"></div>
+
+        <div class="form-group full"><label>Descripción</label><textarea id="maintDesc" placeholder="Detalle del trabajo realizado"></textarea></div>
+
+        <!-- Sección Mecánico / Taller -->
+        <div class="form-group full">
+          <label style="font-weight:600;color:var(--primary);margin-top:8px">🔧 Mecánico / Taller</label>
+        </div>
+        <div class="form-group"><label>Nombre del mecánico o taller</label><input type="text" id="maintShop" placeholder="Ej: Taller Central / Juan Pérez"></div>
+        <div class="form-group"><label>Costo mano de obra (S/)</label><input type="number" step="0.01" min="0" id="maintLabor" value="0" oninput="calcTotal()"></div>
+
+        <!-- Lista dinámica de repuestos -->
+        <div class="form-group full">
+          <label style="font-weight:600;color:var(--primary);margin-top:8px">🧰 Repuestos comprados</label>
+          <div id="partsList" style="display:flex;flex-direction:column;gap:6px;margin-top:6px"></div>
+          <button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px;align-self:flex-start" onclick="addPartRow()">+ Agregar repuesto</button>
+          <div style="text-align:right;font-size:13px;color:var(--muted);margin-top:6px">
+            Subtotal repuestos: <strong id="partsSubtotal">S/ 0.00</strong>
+          </div>
+        </div>
+
+        <div class="form-group"><label>Otros gastos (S/)</label><input type="number" step="0.01" min="0" id="maintOther" value="0" oninput="calcTotal()"></div>
+        <div class="form-group">
+          <label>¿Se emitió factura? *</label>
+          <select id="maintInvoice" required>
+            <option value="No">❌ No nos dio factura</option>
+            <option value="Sí">✅ Sí, con factura</option>
+            <option value="Boleta">🧾 Solo boleta</option>
+          </select>
+        </div>
+        <div class="form-group full"><div class="cost-total" id="maintTotal">Costo total: S/ 0.00</div></div>
+
+        <div class="form-group"><label>Próximo mantenimiento (km)</label><input type="number" min="0" id="nextKm"><span class="form-hint">Opcional</span></div>
+        <div class="form-group"><label>Próximo mantenimiento (fecha)</label><input type="date" id="nextDate"><span class="form-hint">Opcional</span></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('maintModal')">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ MODAL LLANTA ============ -->
+<div class="modal-backdrop" id="tireModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="tireModalTitle">Agregar Llanta</h3>
+      <button class="modal-close" onclick="closeModal('tireModal')">×</button>
+    </div>
+    <form id="tireForm" onsubmit="saveTire(event)">
+      <input type="hidden" id="tireId">
+      <div class="form-grid">
+        <div class="form-group"><label>Unidad *</label><select id="tireUnit" required><option value="">Seleccionar...</option></select></div>
+        <div class="form-group"><label>Posición *</label>
+          <select id="tirePosition" required>
+            <option value="">Seleccionar...</option>
+            <option>Delantera izquierda</option><option>Delantera derecha</option>
+            <option>Trasera izquierda</option><option>Trasera derecha</option>
+            <option>Trasera exterior izquierda</option><option>Trasera exterior derecha</option>
+            <option>Trasera interior izquierda</option><option>Trasera interior derecha</option>
+            <option>Repuesto</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Marca</label><input type="text" id="tireBrand"></div>
+        <div class="form-group"><label>Medida</label><input type="text" id="tireSize" placeholder="Ej: 295/80 R22.5"></div>
+        <div class="form-group"><label>Fecha instalación</label><input type="date" id="tireDate"></div>
+        <div class="form-group"><label>Km instalación</label><input type="number" min="0" id="tireKm"></div>
+        <div class="form-group"><label>Precio (S/)</label><input type="number" step="0.01" min="0" id="tirePrice"></div>
+        <div class="form-group"><label>Estado *</label>
+          <select id="tireStatus" required>
+            <option>Nueva</option><option>Buena</option><option>Regular</option><option>Para cambio</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('tireModal')">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ MODAL DOCUMENTO ============ -->
+<div class="modal-backdrop" id="docModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="docModalTitle">Agregar Documento</h3>
+      <button class="modal-close" onclick="closeModal('docModal')">×</button>
+    </div>
+    <form id="docForm" onsubmit="saveDoc(event)">
+      <input type="hidden" id="docId">
+      <div class="form-grid">
+        <div class="form-group"><label>Unidad *</label><select id="docUnit" required><option value="">Seleccionar...</option></select></div>
+        <div class="form-group"><label>Tipo *</label>
+          <select id="docType" required>
+            <option value="">Seleccionar...</option>
+            <option>SOAT</option><option>Revisión técnica</option>
+            <option>Tarjeta de propiedad</option><option>Seguro</option>
+            <option>Permiso</option><option>Otro</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Fecha emisión *</label><input type="date" id="docIssue" required></div>
+        <div class="form-group"><label>Fecha vencimiento *</label><input type="date" id="docExpiry" required></div>
+        <div class="form-group"><label>Costo (S/)</label><input type="number" step="0.01" min="0" id="docCost"></div>
+        <div class="form-group full">
+          <label>📎 Documento escaneado (PDF o imagen)</label>
+          <input type="file" id="docFile" accept="image/*,.pdf" onchange="handleDocFile(event)">
+          <span class="form-hint">Máx. 2 MB por archivo. Se guarda en el navegador.</span>
+          <div id="docFilePreview" style="margin-top:6px"></div>
+        </div>
+        <div class="form-group full"><label>Observaciones</label><textarea id="docNotes"></textarea></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('docModal')">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   ESTADO GLOBAL Y PERSISTENCIA (localStorage)
+   ============================================================ */
+const STORE_KEY = 'flotaControl_v1';
+let db = { units:[], maintenance:[], tires:[], docs:[] };
+
+function loadDB(){
+  const raw = localStorage.getItem(STORE_KEY);
+  if(raw){ try{ db = JSON.parse(raw); }catch(e){ seedData(); } }
+  else { seedData(); }
+}
+function saveDB(){
+  localStorage.setItem(STORE_KEY, JSON.stringify(db));
+  // Sincroniza a la nube en segundo plano si hay conexión configurada
+  if(supa) scheduleSync();
+}
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* Datos iniciales: las 6 unidades reales del usuario */
+function seedData(){
+  db.units = [
+    {id:uid(), plate:'AYL-775', type:'Camión', brand:'Hyundai',  model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:10000, oilCaja:0},
+    {id:uid(), plate:'BMD-919', type:'Camión', brand:'JAC',      model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:10000, oilCaja:0},
+    {id:uid(), plate:'CEP-842', type:'Camión', brand:'JAC',      model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:5000,  oilCaja:0},
+    {id:uid(), plate:'BPG-895', type:'Camión', brand:'JAC',      model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:5000,  oilCaja:0},
+    {id:uid(), plate:'CBB-918', type:'Camión', brand:'HOWO',     model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:10000, oilCaja:0},
+    {id:uid(), plate:'AEB-750', type:'Camión', brand:'Shinerey', model:'', year:null, capacity:'', km:0, status:'Operativo', oilMotor:5000,  oilCaja:0}
+  ];
+  db.maintenance = [];
+  db.tires = [];
+  db.docs = [];
+  saveDB();
+}
+/* Recargar unidades reales borrando todo (accesible desde consola: resetToMyUnits()) */
+function resetToMyUnits(){
+  if(!confirm('Esto BORRARÁ todos los datos actuales y cargará las 6 unidades reales. ¿Continuar?')) return;
+  localStorage.removeItem(STORE_KEY);
+  db = { units:[], maintenance:[], tires:[], docs:[] };
+  seedData(); renderAll();
+  alert('✓ 6 unidades cargadas correctamente.');
+}
+
+/* ============================================================
+   NAVEGACIÓN Y UI GENERAL
+   ============================================================ */
+document.querySelectorAll('.nav-item').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const v = btn.dataset.view;
+    document.querySelectorAll('.sections>section').forEach(s=>s.classList.remove('active'));
+    document.getElementById('view-'+v).classList.add('active');
+    document.getElementById('pageTitle').textContent = btn.textContent.trim();
+    if(window.innerWidth<=768) document.getElementById('sidebar').classList.remove('open');
+    renderAll();
+  });
+});
+function toggleSidebar(){ document.getElementById('sidebar').classList.toggle('open'); }
+
+function openModal(id){ document.getElementById(id).classList.add('active'); }
+function closeModal(id){ document.getElementById(id).classList.remove('active'); }
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function fmtMoney(n){ return 'S/ ' + (Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtKm(n){ return (Number(n)||0).toLocaleString('es-PE') + ' km'; }
+function fmtDate(d){ if(!d) return '-'; const [y,m,day]=d.split('-'); return `${day}/${m}/${y}`; }
+function getUnit(id){ return db.units.find(u=>u.id===id); }
+function daysBetween(d1,d2){ return Math.floor((new Date(d2)-new Date(d1))/(1000*60*60*24)); }
+function today(){ return new Date().toISOString().slice(0,10); }
+
+/* Estado semáforo según km próximo */
+function kmStatus(currentKm, nextKm){
+  if(!nextKm) return null;
+  const rem = nextKm - currentKm;
+  if(rem <= 0) return {level:'danger', text:`VENCIDO hace ${fmtKm(Math.abs(rem))}`, color:'red'};
+  if(rem <= 1000) return {level:'warn', text:`Faltan ${fmtKm(rem)}`, color:'yellow'};
+  return {level:'ok', text:`Faltan ${fmtKm(rem)}`, color:'green'};
+}
+/* Estado semáforo fecha */
+function dateStatus(expiry){
+  if(!expiry) return null;
+  const diff = daysBetween(today(), expiry);
+  if(diff < 0) return {level:'danger', text:`Vencido hace ${Math.abs(diff)} días`, color:'red'};
+  if(diff <= 7) return {level:'danger', text:`Vence en ${diff} días`, color:'red'};
+  if(diff <= 15) return {level:'warn', text:`Vence en ${diff} días`, color:'yellow'};
+  if(diff <= 30) return {level:'warn', text:`Vence en ${diff} días`, color:'yellow'};
+  return {level:'ok', text:`Vigente (${diff} días)`, color:'green'};
+}
+
+/* ============================================================
+   UNIDADES - CRUD
+   ============================================================ */
+function openUnitModal(id){
+  document.getElementById('unitForm').reset();
+  document.getElementById('unitId').value = '';
+  document.getElementById('unitModalTitle').textContent = id ? 'Editar Unidad' : 'Agregar Unidad';
+  if(id){
+    const u = getUnit(id);
+    document.getElementById('unitId').value = u.id;
+    document.getElementById('unitPlate').value = u.plate;
+    document.getElementById('unitType').value = u.type;
+    document.getElementById('unitBrand').value = u.brand;
+    document.getElementById('unitModel').value = u.model;
+    document.getElementById('unitYear').value = u.year||'';
+    document.getElementById('unitCapacity').value = u.capacity||'';
+    document.getElementById('unitKm').value = u.km;
+    document.getElementById('unitStatus').value = u.status;
+    document.getElementById('unitOilMotor').value = u.oilMotor||'';
+    document.getElementById('unitOilCaja').value = u.oilCaja||'';
+  }
+  openModal('unitModal');
+}
+function saveUnit(e){
+  e.preventDefault();
+  const id = document.getElementById('unitId').value;
+  const newKm = Number(document.getElementById('unitKm').value);
+  const data = {
+    plate: document.getElementById('unitPlate').value.trim().toUpperCase(),
+    type: document.getElementById('unitType').value,
+    brand: document.getElementById('unitBrand').value.trim(),
+    model: document.getElementById('unitModel').value.trim(),
+    year: Number(document.getElementById('unitYear').value)||null,
+    capacity: document.getElementById('unitCapacity').value.trim(),
+    km: newKm,
+    status: document.getElementById('unitStatus').value,
+    oilMotor: Number(document.getElementById('unitOilMotor').value)||0,
+    oilCaja: Number(document.getElementById('unitOilCaja').value)||0
+  };
+  if(id){
+    const u = getUnit(id);
+    // Regla: no permitir disminuir kilometraje
+    if(newKm < u.km){
+      alert(`⚠ El kilometraje no puede disminuir.\nActual: ${fmtKm(u.km)}\nIntentado: ${fmtKm(newKm)}`);
+      return;
+    }
+    Object.assign(u, data);
+  } else {
+    db.units.push({id:uid(), ...data});
+  }
+  saveDB(); closeModal('unitModal'); renderAll();
+}
+function deleteUnit(id){
+  if(!confirm('¿Seguro que deseas eliminar este registro?\n\nSe eliminarán también sus mantenimientos, llantas y documentos asociados.')) return;
+  db.units = db.units.filter(u=>u.id!==id);
+  db.maintenance = db.maintenance.filter(m=>m.unitId!==id);
+  db.tires = db.tires.filter(t=>t.unitId!==id);
+  db.docs = db.docs.filter(d=>d.unitId!==id);
+  saveDB(); renderAll();
+}
+
+/* ============================================================
+   MANTENIMIENTOS - CRUD
+   ============================================================ */
+function openMaintModal(id, presetUnitId){
+  document.getElementById('maintForm').reset();
+  document.getElementById('maintId').value = '';
+  document.getElementById('maintModalTitle').textContent = id ? 'Editar Mantenimiento' : 'Registrar Mantenimiento';
+  fillUnitSelect('maintUnit');
+  document.getElementById('maintDate').value = today();
+  document.querySelectorAll('.oil-field').forEach(f=>f.style.display='none');
+  document.getElementById('otherTypeGroup').style.display='none';
+  document.getElementById('kmFieldGroup').style.display='none';
+  document.getElementById('partsList').innerHTML = '';
+  document.getElementById('maintInvoice').value = 'No';
+  if(id){
+    const m = db.maintenance.find(x=>x.id===id);
+    document.getElementById('maintId').value = m.id;
+    document.getElementById('maintUnit').value = m.unitId;
+    document.getElementById('maintDate').value = m.date;
+    document.getElementById('maintKm').value = m.km||'';
+    document.getElementById('maintType').value = m.type;
+    document.getElementById('maintDesc').value = m.desc||'';
+    document.getElementById('maintShop').value = m.shop||'';
+    document.getElementById('maintLabor').value = m.labor||0;
+    document.getElementById('maintOther').value = m.other||0;
+    document.getElementById('maintInvoice').value = m.invoice||'No';
+    document.getElementById('nextKm').value = m.nextKm||'';
+    document.getElementById('nextDate').value = m.nextDate||'';
+    if(m.oilBrand){
+      document.getElementById('oilBrand').value = m.oilBrand;
+      document.getElementById('oilViscosity').value = m.oilViscosity||'';
+      document.getElementById('oilLiters').value = m.oilLiters||'';
+    }
+    // Cargar lista de repuestos (o convertir el valor legacy)
+    if(m.partsList && m.partsList.length){
+      m.partsList.forEach(p=>addPartRow(p.name, p.cost));
+    } else if(m.parts){
+      addPartRow('Repuestos varios', m.parts);
+    }
+    toggleOtherType(); toggleOilFields(); toggleKmField(); calcTotal();
+  } else if(presetUnitId){
+    document.getElementById('maintUnit').value = presetUnitId;
+    const u = getUnit(presetUnitId);
+    if(u) document.getElementById('maintKm').value = u.km;
+  }
+  calcTotal();
+  openModal('maintModal');
+}
+function toggleOtherType(){
+  const t = document.getElementById('maintType').value;
+  document.getElementById('otherTypeGroup').style.display = t==='Otro' ? 'flex' : 'none';
+}
+function toggleOilFields(){
+  const t = document.getElementById('maintType').value;
+  const isOil = t==='Cambio de aceite de motor' || t==='Cambio de aceite caja y corona';
+  document.querySelectorAll('.oil-field').forEach(f=>f.style.display = isOil?'flex':'none');
+}
+function toggleKmField(){
+  const t = document.getElementById('maintType').value;
+  const needsKm = t==='Cambio de aceite de motor' || t==='Cambio de aceite caja y corona'
+    || t==='Filtro de aceite' || t==='Filtro de aire' || t==='Filtro de combustible';
+  const grp = document.getElementById('kmFieldGroup');
+  const inp = document.getElementById('maintKm');
+  if(needsKm){ grp.style.display='flex'; inp.required = true; document.getElementById('kmRequired').style.display=''; }
+  else { grp.style.display='none'; inp.required = false; inp.value=''; }
+  suggestNextKm();
+}
+
+/* Sugiere el próximo km automáticamente para cambios de aceite */
+function suggestNextKm(){
+  const t = document.getElementById('maintType').value;
+  const unitId = document.getElementById('maintUnit').value;
+  const km = Number(document.getElementById('maintKm').value)||0;
+  const nextField = document.getElementById('nextKm');
+  if(!unitId || !km) return;
+  const u = getUnit(unitId); if(!u) return;
+  let interval = 0;
+  if(t==='Cambio de aceite de motor') interval = u.oilMotor||0;
+  else if(t==='Cambio de aceite caja y corona') interval = u.oilCaja||0;
+  if(interval > 0){
+    nextField.value = km + interval;
+  }
+}
+
+/* ---- Lista dinámica de repuestos ---- */
+function addPartRow(name='', cost=''){
+  const list = document.getElementById('partsList');
+  const row = document.createElement('div');
+  row.className = 'part-row';
+  row.style.cssText = 'display:flex;gap:6px;align-items:center';
+  row.innerHTML = `
+    <input type="text" placeholder="Nombre del repuesto" value="${name.replace(/"/g,'&quot;')}" class="part-name" style="flex:2;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+    <input type="number" step="0.01" min="0" placeholder="0.00" value="${cost}" class="part-cost" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px" oninput="calcTotal()">
+    <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove();calcTotal()" title="Eliminar">🗑</button>
+  `;
+  list.appendChild(row);
+  calcTotal();
+}
+function getPartsList(){
+  const rows = document.querySelectorAll('#partsList .part-row');
+  const list = [];
+  rows.forEach(r=>{
+    const name = r.querySelector('.part-name').value.trim();
+    const cost = Number(r.querySelector('.part-cost').value)||0;
+    if(name || cost) list.push({name: name||'Sin nombre', cost});
+  });
+  return list;
+}
+function calcTotal(){
+  const partsList = getPartsList();
+  const partsTotal = partsList.reduce((s,p)=>s+p.cost, 0);
+  const l = Number(document.getElementById('maintLabor').value)||0;
+  const o = Number(document.getElementById('maintOther').value)||0;
+  document.getElementById('partsSubtotal').textContent = fmtMoney(partsTotal);
+  document.getElementById('maintTotal').textContent = 'Costo total: ' + fmtMoney(partsTotal+l+o);
+}
+function saveMaint(e){
+  e.preventDefault();
+  const id = document.getElementById('maintId').value;
+  const unitId = document.getElementById('maintUnit').value;
+  const kmRaw = document.getElementById('maintKm').value;
+  const km = kmRaw==='' ? 0 : Number(kmRaw);
+  let type = document.getElementById('maintType').value;
+  if(type==='Otro'){
+    const other = document.getElementById('maintOtherType').value.trim();
+    if(other) type = other;
+  }
+  const partsList = getPartsList();
+  const partsTotal = partsList.reduce((s,p)=>s+p.cost, 0);
+  const labor = Number(document.getElementById('maintLabor').value)||0;
+  const other = Number(document.getElementById('maintOther').value)||0;
+  const data = {
+    unitId, date: document.getElementById('maintDate').value,
+    km, type,
+    desc: document.getElementById('maintDesc').value.trim(),
+    shop: document.getElementById('maintShop').value.trim(),
+    partsList, parts: partsTotal,  // parts = total legacy
+    labor, other, total: partsTotal+labor+other,
+    invoice: document.getElementById('maintInvoice').value,
+    nextKm: Number(document.getElementById('nextKm').value)||0,
+    nextDate: document.getElementById('nextDate').value||'',
+    oilBrand: document.getElementById('oilBrand').value.trim(),
+    oilViscosity: document.getElementById('oilViscosity').value.trim(),
+    oilLiters: Number(document.getElementById('oilLiters').value)||0
+  };
+  // Actualizar km del vehículo solo si se registró (y no disminuir)
+  const u = getUnit(unitId);
+  if(u && km > 0 && km > u.km) u.km = km;
+
+  if(id){
+    const m = db.maintenance.find(x=>x.id===id);
+    Object.assign(m, data);
+  } else {
+    db.maintenance.push({id:uid(), ...data});
+  }
+  saveDB(); closeModal('maintModal'); renderAll();
+}
+function deleteMaint(id){
+  if(!confirm('¿Seguro que deseas eliminar este registro?')) return;
+  db.maintenance = db.maintenance.filter(m=>m.id!==id);
+  saveDB(); renderAll();
+}
+
+/* ============================================================
+   LLANTAS - CRUD
+   ============================================================ */
+function openTireModal(id){
+  document.getElementById('tireForm').reset();
+  document.getElementById('tireId').value = '';
+  document.getElementById('tireModalTitle').textContent = id ? 'Editar Llanta' : 'Agregar Llanta';
+  fillUnitSelect('tireUnit');
+  if(id){
+    const t = db.tires.find(x=>x.id===id);
+    document.getElementById('tireId').value = t.id;
+    document.getElementById('tireUnit').value = t.unitId;
+    document.getElementById('tirePosition').value = t.position;
+    document.getElementById('tireBrand').value = t.brand||'';
+    document.getElementById('tireSize').value = t.size||'';
+    document.getElementById('tireDate').value = t.date||'';
+    document.getElementById('tireKm').value = t.km||'';
+    document.getElementById('tirePrice').value = t.price||'';
+    document.getElementById('tireStatus').value = t.status;
+  }
+  openModal('tireModal');
+}
+function saveTire(e){
+  e.preventDefault();
+  const id = document.getElementById('tireId').value;
+  const data = {
+    unitId: document.getElementById('tireUnit').value,
+    position: document.getElementById('tirePosition').value,
+    brand: document.getElementById('tireBrand').value.trim(),
+    size: document.getElementById('tireSize').value.trim(),
+    date: document.getElementById('tireDate').value,
+    km: Number(document.getElementById('tireKm').value)||0,
+    price: Number(document.getElementById('tirePrice').value)||0,
+    status: document.getElementById('tireStatus').value
+  };
+  if(id){ Object.assign(db.tires.find(x=>x.id===id), data); }
+  else { db.tires.push({id:uid(), ...data}); }
+  saveDB(); closeModal('tireModal'); renderAll();
+}
+function deleteTire(id){
+  if(!confirm('¿Seguro que deseas eliminar este registro?')) return;
+  db.tires = db.tires.filter(t=>t.id!==id);
+  saveDB(); renderAll();
+}
+
+/* ============================================================
+   DOCUMENTOS - CRUD
+   ============================================================ */
+function openDocModal(id){
+  document.getElementById('docForm').reset();
+  document.getElementById('docId').value = '';
+  document.getElementById('docFilePreview').innerHTML = '';
+  document.getElementById('docModalTitle').textContent = id ? 'Editar Documento' : 'Agregar Documento';
+  fillUnitSelect('docUnit');
+  if(id){
+    const d = db.docs.find(x=>x.id===id);
+    document.getElementById('docId').value = d.id;
+    document.getElementById('docUnit').value = d.unitId;
+    document.getElementById('docType').value = d.type;
+    document.getElementById('docIssue').value = d.issue;
+    document.getElementById('docExpiry').value = d.expiry;
+    document.getElementById('docCost').value = d.cost||'';
+    document.getElementById('docNotes').value = d.notes||'';
+    if(d.file){
+      document.getElementById('docFilePreview').innerHTML =
+        `<div style="background:#f0f9ff;padding:8px;border-radius:6px;font-size:12px">
+          📎 Archivo guardado: <strong>${d.fileName||'documento'}</strong>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="viewDocFile('${d.id}')">Ver</button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="removeDocFile('${d.id}')">Quitar</button>
+        </div>`;
+    }
+  }
+  openModal('docModal');
+}
+/* Convierte el archivo a base64 y lo guarda temporalmente en el form */
+let tempDocFile = null;
+function handleDocFile(e){
+  const file = e.target.files[0];
+  if(!file){ tempDocFile = null; return; }
+  if(file.size > 2*1024*1024){
+    alert('⚠ El archivo excede 2 MB. Elige uno más pequeño o comprime el PDF/imagen.');
+    e.target.value = ''; tempDocFile = null; return;
+  }
+  const reader = new FileReader();
+  reader.onload = ev => {
+    tempDocFile = { name: file.name, type: file.type, data: ev.target.result };
+    document.getElementById('docFilePreview').innerHTML =
+      `<div style="background:#dcfce7;padding:8px;border-radius:6px;font-size:12px">
+        ✓ Archivo listo para guardar: <strong>${file.name}</strong> (${(file.size/1024).toFixed(0)} KB)
+      </div>`;
+  };
+  reader.readAsDataURL(file);
+}
+function viewDocFile(id){
+  const d = db.docs.find(x=>x.id===id);
+  if(!d || !d.file){ alert('Sin archivo adjunto.'); return; }
+  const w = window.open();
+  if(d.fileType && d.fileType.startsWith('image/')){
+    w.document.write(`<html><head><title>${d.fileName}</title></head>
+      <body style="margin:0;background:#222;display:flex;align-items:center;justify-content:center;min-height:100vh">
+      <img src="${d.file}" style="max-width:100%;max-height:100vh"></body></html>`);
+  } else {
+    w.location.href = d.file;
+  }
+}
+function removeDocFile(id){
+  if(!confirm('¿Quitar el archivo adjunto?')) return;
+  const d = db.docs.find(x=>x.id===id);
+  delete d.file; delete d.fileName; delete d.fileType;
+  saveDB(); document.getElementById('docFilePreview').innerHTML = ''; renderAll();
+}
+function saveDoc(e){
+  e.preventDefault();
+  const id = document.getElementById('docId').value;
+  const data = {
+    unitId: document.getElementById('docUnit').value,
+    type: document.getElementById('docType').value,
+    issue: document.getElementById('docIssue').value,
+    expiry: document.getElementById('docExpiry').value,
+    cost: Number(document.getElementById('docCost').value)||0,
+    notes: document.getElementById('docNotes').value.trim()
+  };
+  // Adjuntar archivo si se cargó uno nuevo
+  if(tempDocFile){
+    data.file = tempDocFile.data;
+    data.fileName = tempDocFile.name;
+    data.fileType = tempDocFile.type;
+  }
+  try{
+    if(id){
+      const existing = db.docs.find(x=>x.id===id);
+      // Preservar archivo previo si no se cambió
+      if(!tempDocFile && existing.file){
+        data.file = existing.file; data.fileName = existing.fileName; data.fileType = existing.fileType;
+      }
+      Object.assign(existing, data);
+    } else {
+      db.docs.push({id:uid(), ...data});
+    }
+    saveDB();
+    tempDocFile = null;
+    closeModal('docModal'); renderAll();
+  } catch(err){
+    alert('⚠ No se pudo guardar. El archivo puede ser demasiado grande para el almacenamiento del navegador.\n\n' + err.message);
+  }
+}
+function deleteDoc(id){
+  if(!confirm('¿Seguro que deseas eliminar este registro?')) return;
+  db.docs = db.docs.filter(d=>d.id!==id);
+  saveDB(); renderAll();
+}
+
+function fillUnitSelect(selectId){
+  const sel = document.getElementById(selectId);
+  sel.innerHTML = '<option value="">Seleccionar...</option>' +
+    db.units.map(u=>`<option value="${u.id}">${u.plate} - ${u.brand} ${u.model}</option>`).join('');
+}
+
+/* ============================================================
+   BÚSQUEDA GLOBAL
+   ============================================================ */
+function matchesSearch(text, q){
+  if(!q) return true;
+  return String(text||'').toLowerCase().includes(q.toLowerCase());
+}
+document.getElementById('globalSearch').addEventListener('input', renderAll);
+
+/* ============================================================
+   RENDER: DASHBOARD
+   ============================================================ */
+function renderDashboard(){
+  // Stats
+  const totalUnits = db.units.length;
+  const operativas = db.units.filter(u=>u.status==='Operativo').length;
+  const enMant = db.units.filter(u=>u.status==='En mantenimiento').length;
+  const proximos = getUpcomingMaint().filter(a=>a.status.level==='warn').length;
+  const vencidos = getUpcomingMaint().filter(a=>a.status.level==='danger').length;
+  const docsProx = db.docs.filter(d=>{
+    const s = dateStatus(d.expiry); return s && (s.level==='warn'||s.level==='danger');
+  }).length;
+  const gastoTotal = db.maintenance.reduce((s,m)=>s+(m.total||0),0);
+
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total unidades</div><div class="stat-value">${totalUnits}</div></div>
+    <div class="stat-card success"><div class="stat-label">Operativas</div><div class="stat-value">${operativas}</div></div>
+    <div class="stat-card warning"><div class="stat-label">En mantenimiento</div><div class="stat-value">${enMant}</div></div>
+    <div class="stat-card warning"><div class="stat-label">Mant. próximos</div><div class="stat-value">${proximos}</div></div>
+    <div class="stat-card danger"><div class="stat-label">Mant. vencidos</div><div class="stat-value">${vencidos}</div></div>
+    <div class="stat-card danger"><div class="stat-label">Docs. por vencer</div><div class="stat-value">${docsProx}</div></div>
+    <div class="stat-card"><div class="stat-label">Gasto total flota</div><div class="stat-value">${fmtMoney(gastoTotal)}</div></div>
+  `;
+
+  // Últimos mantenimientos
+  const latest = [...db.maintenance].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  document.getElementById('latestMaintTable').innerHTML = latest.length ? `
+    <table><thead><tr><th>Fecha</th><th>Unidad</th><th>Tipo</th><th>Taller</th><th>Costo</th></tr></thead>
+    <tbody>${latest.map(m=>{
+      const u = getUnit(m.unitId);
+      return `<tr><td>${fmtDate(m.date)}</td><td>${u?u.plate:'?'}</td><td>${m.type}</td><td>${m.shop||'-'}</td><td>${fmtMoney(m.total)}</td></tr>`;
+    }).join('')}</tbody></table>` : '<div class="empty">Sin mantenimientos registrados.</div>';
+
+  // Alertas
+  const alerts = getUpcomingMaint().filter(a=>a.status.level!=='ok').slice(0,10);
+  document.getElementById('alertsList').innerHTML = alerts.length ? `
+    <table><thead><tr><th>Unidad</th><th>Tipo</th><th>Próximo</th><th>Estado</th></tr></thead>
+    <tbody>${alerts.map(a=>`
+      <tr>
+        <td><strong>${a.unit.plate}</strong></td>
+        <td>${a.type}</td>
+        <td>${a.nextKm?fmtKm(a.nextKm):''} ${a.nextDate?' / '+fmtDate(a.nextDate):''}</td>
+        <td><span class="dot dot-${a.status.color}"></span>${a.status.text}</td>
+      </tr>`).join('')}</tbody></table>` : '<div class="empty">✓ Sin alertas de mantenimiento.</div>';
+
+  // Docs
+  const docsAlert = db.docs.map(d=>({d, s:dateStatus(d.expiry)})).filter(x=>x.s && x.s.level!=='ok');
+  document.getElementById('docsAlerts').innerHTML = docsAlert.length ? `
+    <table><thead><tr><th>Unidad</th><th>Documento</th><th>Vencimiento</th><th>Estado</th></tr></thead>
+    <tbody>${docsAlert.map(x=>{
+      const u = getUnit(x.d.unitId);
+      return `<tr><td><strong>${u?u.plate:'?'}</strong></td><td>${x.d.type}</td><td>${fmtDate(x.d.expiry)}</td>
+        <td><span class="dot dot-${x.s.color}"></span>${x.s.text}</td></tr>`;
+    }).join('')}</tbody></table>` : '<div class="empty">✓ Todos los documentos vigentes.</div>';
+
+  renderOilAlerts();
+}
+
+/* Alertas específicas de cambio de aceite (motor y caja/corona) */
+function renderOilAlerts(){
+  const oilTypes = ['Cambio de aceite de motor', 'Cambio de aceite caja y corona'];
+  // Último cambio de cada tipo por unidad
+  const latest = {}; // key: unitId|type
+  db.maintenance.forEach(m=>{
+    if(!oilTypes.includes(m.type)) return;
+    const key = m.unitId+'|'+m.type;
+    if(!latest[key] || m.date > latest[key].date) latest[key] = m;
+  });
+  const alerts = [];
+  Object.values(latest).forEach(m=>{
+    const u = getUnit(m.unitId); if(!u) return;
+    // Solo alertar si hay próximo definido
+    let status = null;
+    if(m.nextKm){
+      const kmS = kmStatus(u.km, m.nextKm);
+      if(kmS && kmS.level!=='ok') status = kmS;
+    }
+    if(m.nextDate){
+      const dS = dateStatus(m.nextDate);
+      if(dS && dS.level!=='ok' && (!status || dS.level==='danger')) status = dS;
+    }
+    if(status) alerts.push({unit:u, m, status});
+  });
+  // Ordenar: vencidos primero
+  alerts.sort((a,b)=> (a.status.level==='danger'?0:1) - (b.status.level==='danger'?0:1));
+
+  const el = document.getElementById('oilAlerts');
+  if(!alerts.length){ el.innerHTML = '<div class="empty">✓ Todos los cambios de aceite al día.</div>'; return; }
+  el.innerHTML = `
+    <table><thead><tr>
+      <th>Unidad</th><th>Tipo de aceite</th><th>Último cambio</th><th>Próximo</th><th>Estado</th>
+    </tr></thead><tbody>
+    ${alerts.map(a=>{
+      const shortType = a.m.type.replace('Cambio de aceite ','');
+      const nextInfo = a.m.nextKm?fmtKm(a.m.nextKm):(a.m.nextDate?fmtDate(a.m.nextDate):'-');
+      const rowStyle = a.status.level==='danger'?'background:#fef2f2':'background:#fffbeb';
+      return `<tr style="${rowStyle}">
+        <td><strong>${a.unit.plate}</strong></td>
+        <td>${shortType}${a.m.oilViscosity?' ('+a.m.oilViscosity+')':''}</td>
+        <td>${fmtDate(a.m.date)} · ${fmtKm(a.m.km)}</td>
+        <td>${nextInfo}</td>
+        <td><span class="dot dot-${a.status.color}"></span><strong>${a.status.text}</strong></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+/* Obtener próximos mantenimientos por unidad (el más reciente por tipo) */
+function getUpcomingMaint(){
+  const map = {};
+  db.maintenance.forEach(m=>{
+    if(!m.nextKm && !m.nextDate) return;
+    const key = m.unitId+'|'+m.type;
+    if(!map[key] || m.date > map[key].date) map[key] = m;
+  });
+  return Object.values(map).map(m=>{
+    const unit = getUnit(m.unitId);
+    if(!unit) return null;
+    let status = null;
+    const kmS = kmStatus(unit.km, m.nextKm);
+    const dtS = dateStatus(m.nextDate);
+    // Priorizar peor estado
+    if(kmS && dtS){
+      const rank = {ok:0, warn:1, danger:2};
+      status = rank[kmS.level] >= rank[dtS.level] ? kmS : dtS;
+    } else status = kmS || dtS;
+    return {unit, type:m.type, nextKm:m.nextKm, nextDate:m.nextDate, status};
+  }).filter(x=>x && x.status);
+}
+
+/* ============================================================
+   RENDER: UNIDADES
+   ============================================================ */
+function renderUnits(){
+  const q = document.getElementById('globalSearch').value;
+  const filtered = db.units.filter(u=>
+    matchesSearch(u.plate,q)||matchesSearch(u.brand,q)||matchesSearch(u.model,q)||matchesSearch(u.type,q));
+  const grid = document.getElementById('unitsGrid');
+  if(!filtered.length){ grid.innerHTML = '<div class="empty">No hay unidades. Agrega la primera.</div>'; return; }
+  grid.innerHTML = filtered.map(u=>{
+    const statusBadge = u.status==='Operativo'?'badge-ok':(u.status==='En mantenimiento'?'badge-warn':'badge-danger');
+    // Próximo mant para esta unidad
+    const upcoming = getUpcomingMaint().filter(x=>x.unit.id===u.id);
+    const worstDanger = upcoming.some(x=>x.status.level==='danger');
+    const worstWarn = upcoming.some(x=>x.status.level==='warn');
+    const alertText = worstDanger ? '🔴 Tiene mantenimientos vencidos'
+                    : worstWarn ? '🟡 Mantenimiento próximo' : '🟢 Al día';
+    return `
+      <div class="unit-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div class="unit-plate">${u.plate}</div>
+          <span class="badge ${statusBadge}">${u.status}</span>
+        </div>
+        <div class="unit-info">${u.type} · ${u.brand} ${u.model} ${u.year?'· '+u.year:''}</div>
+        ${u.capacity?`<div class="unit-info">Capacidad: ${u.capacity}</div>`:''}
+        <div class="unit-km">${fmtKm(u.km)}</div>
+        ${u.oilMotor?`<div style="font-size:12px;color:var(--muted)">🛢 Aceite motor cada ${fmtKm(u.oilMotor)}</div>`:''}
+        ${u.oilCaja?`<div style="font-size:12px;color:var(--muted)">⚙ Caja/corona cada ${fmtKm(u.oilCaja)}</div>`:''}
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">${alertText}</div>
+        <div class="unit-actions">
+          <button class="btn btn-primary btn-sm" onclick="openMaintModal(null,'${u.id}')">+ Mant.</button>
+          <button class="btn btn-secondary btn-sm" onclick="viewHistory('${u.id}')">Historial</button>
+          <button class="btn btn-secondary btn-sm" onclick="openUnitModal('${u.id}')">✏</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteUnit('${u.id}')">🗑</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+function viewHistory(unitId){
+  document.querySelector('[data-view="historial"]').click();
+  // Esperar a que se rendericen los checkboxes y marcar solo el de esta unidad
+  setTimeout(()=>{
+    document.querySelectorAll('#historyUnitCheckboxes input').forEach(cb=>{
+      cb.checked = (cb.value === unitId);
+    });
+    renderHistory();
+  }, 50);
+}
+
+/* ============================================================
+   RENDER: MANTENIMIENTOS
+   ============================================================ */
+function renderMaintenance(){
+  const q = document.getElementById('globalSearch').value;
+  const list = [...db.maintenance].sort((a,b)=>b.date.localeCompare(a.date));
+  const filtered = list.filter(m=>{
+    const u = getUnit(m.unitId);
+    return matchesSearch(m.type,q)||matchesSearch(m.desc,q)||matchesSearch(m.shop,q)||(u&&matchesSearch(u.plate,q));
+  });
+  const el = document.getElementById('maintTable');
+  if(!filtered.length){ el.innerHTML = '<div class="empty">Sin mantenimientos.</div>'; return; }
+  el.innerHTML = `
+    <table><thead><tr>
+      <th>Fecha</th><th>Unidad</th><th>Km</th><th>Tipo</th><th>Taller</th>
+      <th>Costo</th><th>Próximo</th><th>Acciones</th>
+    </tr></thead><tbody>
+    ${filtered.map(m=>{
+      const u = getUnit(m.unitId);
+      let nextInfo = '';
+      if(m.nextKm){
+        const s = u ? kmStatus(u.km, m.nextKm) : null;
+        nextInfo = `${fmtKm(m.nextKm)}${s?` <span class="km-status ${s.level}"><span class="dot dot-${s.color}"></span>${s.text}</span>`:''}`;
+      } else if(m.nextDate){
+        const s = dateStatus(m.nextDate);
+        nextInfo = `${fmtDate(m.nextDate)}${s?` <span class="km-status ${s.level}"><span class="dot dot-${s.color}"></span>${s.text}</span>`:''}`;
+      } else nextInfo = '-';
+      return `<tr>
+        <td>${fmtDate(m.date)}</td>
+        <td>${u?u.plate:'?'}</td>
+        <td>${fmtKm(m.km)}</td>
+        <td>${m.type}</td>
+        <td>${m.shop||'-'}</td>
+        <td>${fmtMoney(m.total)}</td>
+        <td>${nextInfo}</td>
+        <td class="table-actions">
+          <button class="btn btn-primary btn-sm" onclick="sendMaintWhatsApp('${m.id}')" title="Enviar por WhatsApp">📱</button>
+          <button class="btn btn-secondary btn-sm" onclick="printMaint('${m.id}')" title="Imprimir">🖨</button>
+          <button class="btn btn-secondary btn-sm" onclick="openMaintModal('${m.id}')">✏</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteMaint('${m.id}')">🗑</button>
+        </td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+/* ============================================================
+   RENDER: LLANTAS
+   ============================================================ */
+function renderTires(){
+  const q = document.getElementById('globalSearch').value;
+  const filtered = db.tires.filter(t=>{
+    const u = getUnit(t.unitId);
+    return matchesSearch(t.brand,q)||matchesSearch(t.position,q)||(u&&matchesSearch(u.plate,q));
+  });
+  const el = document.getElementById('tiresTable');
+  if(!filtered.length){ el.innerHTML = '<div class="empty">Sin llantas registradas.</div>'; return; }
+  el.innerHTML = `
+    <table><thead><tr>
+      <th>Unidad</th><th>Posición</th><th>Marca</th><th>Medida</th>
+      <th>Instalación</th><th>Km inst.</th><th>Precio</th><th>Estado</th><th>Acciones</th>
+    </tr></thead><tbody>
+    ${filtered.map(t=>{
+      const u = getUnit(t.unitId);
+      const badge = t.status==='Nueva'||t.status==='Buena'?'badge-ok':(t.status==='Regular'?'badge-warn':'badge-danger');
+      return `<tr>
+        <td>${u?u.plate:'?'}</td><td>${t.position}</td><td>${t.brand||'-'}</td>
+        <td>${t.size||'-'}</td><td>${fmtDate(t.date)}</td><td>${fmtKm(t.km)}</td>
+        <td>${fmtMoney(t.price)}</td><td><span class="badge ${badge}">${t.status}</span></td>
+        <td class="table-actions">
+          <button class="btn btn-secondary btn-sm" onclick="openTireModal('${t.id}')">✏</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteTire('${t.id}')">🗑</button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+/* ============================================================
+   RENDER: DOCUMENTOS
+   ============================================================ */
+function renderDocs(){
+  const q = document.getElementById('globalSearch').value;
+  const filtered = db.docs.filter(d=>{
+    const u = getUnit(d.unitId);
+    return matchesSearch(d.type,q)||matchesSearch(d.notes,q)||(u&&matchesSearch(u.plate,q));
+  });
+  const el = document.getElementById('docsTable');
+  if(!filtered.length){ el.innerHTML = '<div class="empty">Sin documentos.</div>'; return; }
+  el.innerHTML = `
+    <table><thead><tr>
+      <th>Unidad</th><th>Tipo</th><th>Emisión</th><th>Vencimiento</th>
+      <th>Estado</th><th>Costo</th><th>Archivo</th><th>Observaciones</th><th>Acciones</th>
+    </tr></thead><tbody>
+    ${filtered.map(d=>{
+      const u = getUnit(d.unitId);
+      const s = dateStatus(d.expiry);
+      const label = s.level==='ok'?'Vigente':(s.level==='warn'?'Próx. a vencer':'Vencido');
+      const badge = s.level==='ok'?'badge-ok':(s.level==='warn'?'badge-warn':'badge-danger');
+      const fileCell = d.file
+        ? `<button class="btn btn-secondary btn-sm" onclick="viewDocFile('${d.id}')" title="Ver ${d.fileName}">📎 Ver</button>`
+        : '<span style="color:var(--muted);font-size:11px">Sin archivo</span>';
+      return `<tr>
+        <td>${u?u.plate:'?'}</td><td>${d.type}</td><td>${fmtDate(d.issue)}</td>
+        <td>${fmtDate(d.expiry)}</td>
+        <td><span class="badge ${badge}">${label}</span><div style="font-size:11px;color:var(--muted);margin-top:2px">${s.text}</div></td>
+        <td>${fmtMoney(d.cost)}</td>
+        <td>${fileCell}</td>
+        <td>${d.notes||'-'}</td>
+        <td class="table-actions">
+          <button class="btn btn-secondary btn-sm" onclick="openDocModal('${d.id}')">✏</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteDoc('${d.id}')">🗑</button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+/* ============================================================
+   RENDER: HISTORIAL Y COSTOS
+   ============================================================ */
+/* Devuelve array de IDs de unidades marcadas */
+function getSelectedHistoryUnits(){
+  return [...document.querySelectorAll('#historyUnitCheckboxes input:checked')].map(cb=>cb.value);
+}
+function toggleAllHistoryUnits(check){
+  document.querySelectorAll('#historyUnitCheckboxes input').forEach(cb=>cb.checked=check);
+  renderHistory();
+}
+function clearHistoryFilters(){
+  toggleAllHistoryUnits(false);
+  document.getElementById('historyDateFrom').value='';
+  document.getElementById('historyDateTo').value='';
+  document.getElementById('historyTypeFilter').value='';
+  renderHistory();
+}
+function getFilteredHistory(){
+  const selectedUnits = getSelectedHistoryUnits();
+  const dFrom = document.getElementById('historyDateFrom').value;
+  const dTo = document.getElementById('historyDateTo').value;
+  const tFilter = document.getElementById('historyTypeFilter').value;
+  const q = document.getElementById('globalSearch').value;
+  let list = [...db.maintenance].sort((a,b)=>b.date.localeCompare(a.date));
+  // Si no hay unidades seleccionadas, no mostrar ningún registro
+  if(selectedUnits.length === 0) list = [];
+  else list = list.filter(m=>selectedUnits.includes(m.unitId));
+  if(dFrom) list = list.filter(m=>m.date>=dFrom);
+  if(dTo) list = list.filter(m=>m.date<=dTo);
+  if(tFilter) list = list.filter(m=>m.type===tFilter);
+  list = list.filter(m=>{
+    const u = getUnit(m.unitId);
+    return matchesSearch(m.type,q)||matchesSearch(m.desc,q)||matchesSearch(m.shop,q)||(u&&matchesSearch(u.plate,q));
+  });
+  return list;
+}
+function renderHistory(){
+  // Reconstruir checkboxes preservando estado
+  const container = document.getElementById('historyUnitCheckboxes');
+  const currentlyChecked = new Set(getSelectedHistoryUnits());
+  container.innerHTML = db.units.length
+    ? db.units.map(u=>`
+        <label style="display:inline-flex;align-items:center;gap:4px;background:#f3f4f6;padding:4px 10px;border-radius:14px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="${u.id}" ${currentlyChecked.has(u.id)?'checked':''} onchange="renderHistory()">
+          <strong>${u.plate}</strong> <span style="color:var(--muted)">${u.brand}</span>
+        </label>`).join('')
+    : '<span style="color:var(--muted);font-size:13px">No hay unidades registradas.</span>';
+
+  // Poblar select de tipos
+  const selT = document.getElementById('historyTypeFilter');
+  const curT = selT.value;
+  const types = [...new Set(db.maintenance.map(m=>m.type))].sort();
+  selT.innerHTML = '<option value="">Todos los tipos</option>' + types.map(t=>`<option value="${t}">${t}</option>`).join('');
+  selT.value = curT;
+
+  const selectedUnits = getSelectedHistoryUnits();
+  const list = getFilteredHistory();
+  const totalCost = list.reduce((s,m)=>s+(m.total||0),0);
+
+  // Resumen
+  const summaryEl = document.getElementById('historySummary');
+  if(selectedUnits.length === 0){
+    summaryEl.innerHTML = '👆 Selecciona al menos una unidad para ver el historial y los gastos.';
+  } else {
+    summaryEl.innerHTML =
+      `📊 <strong>${list.length}</strong> registro(s) encontrado(s) en <strong>${selectedUnits.length}</strong> unidad(es) · Costo total: <strong>${fmtMoney(totalCost)}</strong>`;
+  }
+
+  // Tabla de historial
+  const el = document.getElementById('historyTable');
+  if(selectedUnits.length === 0){
+    el.innerHTML = '<div class="empty">Selecciona una o varias unidades arriba para ver sus registros.</div>';
+  } else {
+    el.innerHTML = list.length ? `
+      <table><thead><tr>
+        <th>Fecha</th><th>Unidad</th><th>Km</th><th>Tipo</th><th>Descripción</th>
+        <th>Taller</th><th>Repuestos</th><th>M. obra</th><th>Otros</th><th>Total</th><th>Próximo</th><th>Acciones</th>
+      </tr></thead><tbody>
+      ${list.map(m=>{
+        const u = getUnit(m.unitId);
+        const next = m.nextKm ? fmtKm(m.nextKm) : (m.nextDate?fmtDate(m.nextDate):'-');
+        return `<tr>
+          <td>${fmtDate(m.date)}</td><td><strong>${u?u.plate:'?'}</strong></td><td>${m.km?fmtKm(m.km):'-'}</td>
+          <td>${m.type}</td><td>${m.desc||'-'}</td><td>${m.shop||'-'}</td>
+          <td>${fmtMoney(m.parts)}</td><td>${fmtMoney(m.labor)}</td>
+          <td>${fmtMoney(m.other)}</td><td><strong>${fmtMoney(m.total)}</strong></td><td>${next}</td>
+          <td class="table-actions">
+            <button class="btn btn-primary btn-sm" onclick="sendMaintWhatsApp('${m.id}')" title="WhatsApp">📱</button>
+            <button class="btn btn-secondary btn-sm" onclick="printMaint('${m.id}')" title="Imprimir">🖨</button>
+          </td>
+        </tr>`;
+      }).join('')}</tbody></table>` : '<div class="empty">Sin registros en el rango seleccionado.</div>';
+  }
+
+  // Bloque de gastos: solo si hay unidades seleccionadas
+  const costsBlock = document.getElementById('costsBlock');
+  if(selectedUnits.length === 0){
+    costsBlock.style.display = 'none';
+    return;
+  }
+  costsBlock.style.display = 'block';
+
+  // Gastos por cada unidad seleccionada (respetando fechas y tipo del filtro)
+  const byUnit = {};
+  list.forEach(m=>{ byUnit[m.unitId] = (byUnit[m.unitId]||0) + (m.total||0); });
+  document.getElementById('costsByUnit').innerHTML = selectedUnits.map(uid=>{
+    const u = getUnit(uid); if(!u) return '';
+    return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span><strong>${u.plate}</strong> - ${u.brand} ${u.model}</span>
+      <span><strong>${fmtMoney(byUnit[uid]||0)}</strong></span></div>`;
+  }).join('');
+
+  // Gastos por tipo (solo de las unidades seleccionadas)
+  const byType = {};
+  list.forEach(m=>{ byType[m.type] = (byType[m.type]||0) + (m.total||0); });
+  const sortedTypes = Object.entries(byType).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('costsByType').innerHTML = sortedTypes.length ? sortedTypes.map(([t,v])=>
+    `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span>${t}</span><span>${fmtMoney(v)}</span></div>`).join('') : '<div class="empty">Sin datos en el rango.</div>';
+}
+
+/* ============================================================
+   RENDER GENERAL
+   ============================================================ */
+function renderAll(){
+  renderDashboard(); renderUnits(); renderMaintenance();
+  renderTires(); renderDocs(); renderHistory();
+}
+
+/* ============================================================
+   REPORTES: WHATSAPP E IMPRESIÓN
+   ============================================================ */
+
+/* Construye el texto de un reporte individual de mantenimiento */
+function buildMaintReport(m){
+  const u = getUnit(m.unitId);
+  let txt = `🚛 *REPORTE DE MANTENIMIENTO*\n`;
+  txt += `━━━━━━━━━━━━━━━━━━━━\n`;
+  txt += `📅 Fecha: ${fmtDate(m.date)}\n`;
+  txt += `🚚 Unidad: ${u?u.plate:'?'} - ${u?u.brand+' '+u.model:''}\n`;
+  if(m.km) txt += `📊 Kilometraje: ${fmtKm(m.km)}\n`;
+  txt += `🔧 Tipo: ${m.type}\n`;
+  if(m.desc) txt += `📝 Descripción: ${m.desc}\n`;
+  if(m.oilBrand){
+    txt += `\n🛢 *Datos del aceite*\n`;
+    txt += `   Marca: ${m.oilBrand}\n`;
+    if(m.oilViscosity) txt += `   Viscosidad: ${m.oilViscosity}\n`;
+    if(m.oilLiters) txt += `   Litros: ${m.oilLiters}\n`;
+  }
+  txt += `\n🔧 *Mano de obra*\n`;
+  if(m.shop) txt += `   Mecánico/Taller: ${m.shop}\n`;
+  txt += `   Costo: ${fmtMoney(m.labor)}\n`;
+  if(m.partsList && m.partsList.length){
+    txt += `\n🧰 *Repuestos*\n`;
+    m.partsList.forEach(p=>{ txt += `   • ${p.name}: ${fmtMoney(p.cost)}\n`; });
+    txt += `   Subtotal: ${fmtMoney(m.parts)}\n`;
+  } else if(m.parts){
+    txt += `\n🧰 Repuestos: ${fmtMoney(m.parts)}\n`;
+  }
+  if(m.other) txt += `\n💵 Otros gastos: ${fmtMoney(m.other)}\n`;
+  txt += `\n💰 *TOTAL: ${fmtMoney(m.total)}*\n`;
+  const invoiceIcon = m.invoice==='Sí'?'✅':(m.invoice==='Boleta'?'🧾':'❌');
+  txt += `${invoiceIcon} Factura: ${m.invoice||'No especificado'}\n`;
+  if(m.nextKm || m.nextDate){
+    txt += `\n⏭ *Próximo mantenimiento*\n`;
+    if(m.nextKm) txt += `   Kilometraje: ${fmtKm(m.nextKm)}\n`;
+    if(m.nextDate) txt += `   Fecha: ${fmtDate(m.nextDate)}\n`;
+  }
+  txt += `━━━━━━━━━━━━━━━━━━━━\nFlotaControl`;
+  return txt;
+}
+
+/* Enviar un mantenimiento individual por WhatsApp */
+function sendMaintWhatsApp(id){
+  const m = db.maintenance.find(x=>x.id===id);
+  if(!m) return;
+  const txt = buildMaintReport(m);
+  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+}
+
+/* Imprimir un mantenimiento individual en una ventana nueva */
+function printMaint(id){
+  const m = db.maintenance.find(x=>x.id===id);
+  if(!m) return;
+  const u = getUnit(m.unitId);
+  const w = window.open('', '_blank');
+  w.document.write(`
+    <html><head><title>Reporte ${u?u.plate:''} - ${fmtDate(m.date)}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:30px;max-width:700px;margin:auto;color:#222}
+      h1{text-align:center;border-bottom:2px solid #000;padding-bottom:10px}
+      .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee}
+      .label{font-weight:bold;color:#555}
+      .total{background:#eff6ff;padding:12px;text-align:center;font-size:18px;font-weight:bold;margin-top:20px;border-radius:6px}
+      .section{margin-top:20px;padding-top:10px;border-top:2px solid #ccc}
+      .footer{margin-top:30px;text-align:center;font-size:12px;color:#888}
+      @media print{ .noprint{display:none} }
+    </style></head><body>
+    <h1>🚛 Reporte de Mantenimiento</h1>
+    <div class="row"><span class="label">Fecha:</span><span>${fmtDate(m.date)}</span></div>
+    <div class="row"><span class="label">Unidad:</span><span>${u?u.plate:'?'} - ${u?u.brand+' '+u.model:''}</span></div>
+    <div class="row"><span class="label">Tipo de vehículo:</span><span>${u?u.type:'-'}</span></div>
+    ${m.km?`<div class="row"><span class="label">Kilometraje:</span><span>${fmtKm(m.km)}</span></div>`:''}
+    <div class="row"><span class="label">Tipo de mantenimiento:</span><span>${m.type}</span></div>
+    <div class="row"><span class="label">Descripción:</span><span>${m.desc||'-'}</span></div>
+    ${m.oilBrand?`
+      <div class="section"><h3>🛢 Datos del aceite</h3>
+        <div class="row"><span class="label">Marca:</span><span>${m.oilBrand}</span></div>
+        <div class="row"><span class="label">Viscosidad:</span><span>${m.oilViscosity||'-'}</span></div>
+        <div class="row"><span class="label">Litros:</span><span>${m.oilLiters||'-'}</span></div>
+      </div>`:''}
+    <div class="section"><h3>🔧 Mecánico / Taller</h3>
+      <div class="row"><span class="label">Nombre:</span><span>${m.shop||'-'}</span></div>
+      <div class="row"><span class="label">Costo mano de obra:</span><span>${fmtMoney(m.labor)}</span></div>
+    </div>
+    ${(m.partsList&&m.partsList.length)?`
+      <div class="section"><h3>🧰 Repuestos comprados</h3>
+        ${m.partsList.map(p=>`<div class="row"><span>${p.name}</span><span>${fmtMoney(p.cost)}</span></div>`).join('')}
+        <div class="row"><span class="label">Subtotal repuestos:</span><span><strong>${fmtMoney(m.parts)}</strong></span></div>
+      </div>`:(m.parts?`
+      <div class="section"><h3>🧰 Repuestos</h3>
+        <div class="row"><span class="label">Total repuestos:</span><span>${fmtMoney(m.parts)}</span></div>
+      </div>`:'')}
+    <div class="section"><h3>💰 Resumen de costos</h3>
+      <div class="row"><span class="label">Repuestos:</span><span>${fmtMoney(m.parts)}</span></div>
+      <div class="row"><span class="label">Mano de obra:</span><span>${fmtMoney(m.labor)}</span></div>
+      <div class="row"><span class="label">Otros gastos:</span><span>${fmtMoney(m.other)}</span></div>
+      <div class="total">TOTAL: ${fmtMoney(m.total)}</div>
+      <div class="row" style="margin-top:10px"><span class="label">¿Se emitió factura?</span>
+        <span><strong>${m.invoice==='Sí'?'✅ Sí, con factura':(m.invoice==='Boleta'?'🧾 Solo boleta':'❌ No nos dio factura')}</strong></span>
+      </div>
+    </div>
+    ${(m.nextKm||m.nextDate)?`
+      <div class="section"><h3>⏭ Próximo mantenimiento</h3>
+        ${m.nextKm?`<div class="row"><span class="label">Kilometraje:</span><span>${fmtKm(m.nextKm)}</span></div>`:''}
+        ${m.nextDate?`<div class="row"><span class="label">Fecha:</span><span>${fmtDate(m.nextDate)}</span></div>`:''}
+      </div>`:''}
+    <div class="footer">Reporte generado el ${fmtDate(today())} · FlotaControl</div>
+    <div class="noprint" style="text-align:center;margin-top:20px">
+      <button onclick="window.print()" style="padding:10px 20px;font-size:14px">🖨 Imprimir</button>
+    </div>
+    </body></html>`);
+  w.document.close();
+}
+
+/* Enviar el historial filtrado completo por WhatsApp (resumen) */
+function sendHistoryWhatsApp(){
+  const list = getFilteredHistory();
+  if(!list.length){ alert('No hay registros para enviar.'); return; }
+  const total = list.reduce((s,m)=>s+(m.total||0),0);
+  let txt = `🚛 *HISTORIAL DE MANTENIMIENTO*\n`;
+  txt += `📅 Generado: ${fmtDate(today())}\n`;
+  txt += `📊 ${list.length} registro(s) · Total: ${fmtMoney(total)}\n`;
+  txt += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+  list.slice(0,30).forEach((m,i)=>{
+    const u = getUnit(m.unitId);
+    txt += `${i+1}. ${fmtDate(m.date)} | ${u?u.plate:'?'}\n`;
+    txt += `   ${m.type} · ${fmtKm(m.km)} · ${fmtMoney(m.total)}\n`;
+    if(m.shop) txt += `   Taller: ${m.shop}\n`;
+    txt += `\n`;
+  });
+  if(list.length>30) txt += `... y ${list.length-30} más\n`;
+  txt += `━━━━━━━━━━━━━━━━━━━━\nFlotaControl`;
+  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+}
+
+/* Imprimir la vista actual (dashboard, historial, etc.) */
+function printCurrentView(){
+  document.getElementById('printDateHeader').textContent = 'Generado el ' + fmtDate(today());
+  window.print();
+}
+/* ============================================================
+   SUPABASE - SINCRONIZACIÓN EN LA NUBE
+   ============================================================ */
+const CFG_KEY = 'flotaControl_supabase';
+let supa = null;
+let syncTimer = null;
+let isSyncing = false;
+
+function getCloudConfig(){
+  try { return JSON.parse(localStorage.getItem(CFG_KEY)||'{}'); } catch(e){ return {}; }
+}
+function setCloudConfig(cfg){ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
+
+function initSupabase(){
+  const cfg = getCloudConfig();
+  if(!cfg.url || !cfg.key){ setCloudDot('off'); return null; }
+  if(!window.supabase || !window.supabase.createClient){
+    setCloudDot('error', 'SDK no cargado');
+    return null;
+  }
+  try {
+    supa = window.supabase.createClient(cfg.url, cfg.key);
+    setCloudDot('ok');
+    return supa;
+  } catch(e){
+    setCloudDot('error', e.message);
+    return null;
+  }
+}
+
+function setCloudDot(state, msg){
+  const dot = document.getElementById('cloudDot');
+  const label = document.getElementById('cloudLabel');
+  const map = {
+    off:   {c:'#9ca3af', t:'Nube'},
+    ok:    {c:'#16a34a', t:'Nube'},
+    syncing: {c:'#f59e0b', t:'Sincro...'},
+    error: {c:'#dc2626', t:'Error'}
+  };
+  const s = map[state]||map.off;
+  dot.style.background = s.c;
+  label.textContent = s.t;
+  dot.title = msg || state;
+}
+
+function openCloudModal(){
+  const cfg = getCloudConfig();
+  document.getElementById('supaUrl').value = cfg.url||'';
+  document.getElementById('supaKey').value = cfg.key||'';
+  updateCloudStatusText();
+  openModal('cloudModal');
+}
+function updateCloudStatusText(){
+  const el = document.getElementById('cloudStatus');
+  const cfg = getCloudConfig();
+  if(!cfg.url || !cfg.key){
+    el.innerHTML = '⚪ <strong>Sin conectar.</strong> Sigue las instrucciones abajo para configurar.';
+    el.style.background = '#f3f4f6';
+  } else if(supa){
+    el.innerHTML = '🟢 <strong>Conectado.</strong> Los cambios se sincronizan automáticamente.';
+    el.style.background = '#dcfce7';
+  } else {
+    el.innerHTML = '🔴 <strong>Error de conexión.</strong> Revisa las credenciales.';
+    el.style.background = '#fee2e2';
+  }
+}
+
+async function saveCloudConfig(){
+  const url = document.getElementById('supaUrl').value.trim();
+  const key = document.getElementById('supaKey').value.trim();
+  if(!url || !key){ alert('Debes ingresar URL y clave.'); return; }
+  setCloudConfig({url, key});
+  initSupabase();
+  updateCloudStatusText();
+  // Preguntar si quiere traer datos existentes de la nube
+  if(supa){
+    if(confirm('Conectado ✓\n\n¿Quieres traer los datos que ya tengas en la nube? (Esto reemplazará los datos locales.)\n\nSi es tu primera vez o quieres subir tus datos actuales, presiona Cancelar y luego "🔄 Sincronizar ahora".')){
+      await pullFromCloud();
+    } else {
+      await manualSync();
+    }
+  }
+}
+
+function disconnectCloud(){
+  if(!confirm('¿Desconectar de Supabase? Los datos locales se conservan.')) return;
+  localStorage.removeItem(CFG_KEY);
+  supa = null;
+  setCloudDot('off');
+  updateCloudStatusText();
+}
+
+function copySql(){
+  const t = document.getElementById('sqlSnippet').textContent;
+  navigator.clipboard.writeText(t).then(()=>alert('✓ SQL copiado al portapapeles'));
+}
+
+/* ---- Sincronización ---- */
+/* Programa un sync automático diferido (debounce) para no sobrecargar */
+function scheduleSync(){
+  if(!supa) return;
+  if(syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(()=>{ syncToCloud(); }, 1500);
+}
+
+/* Sube todos los datos locales a la nube (full sync) */
+async function syncToCloud(){
+  if(!supa || isSyncing) return;
+  isSyncing = true;
+  setCloudDot('syncing');
+  try {
+    const entities = ['units','maintenance','tires','docs'];
+    for(const entity of entities){
+      const local = db[entity] || [];
+      const localIds = new Set(local.map(r=>r.id));
+      // Obtener IDs remotos
+      const {data: remote, error: e1} = await supa.from('flotacontrol').select('id').eq('entity', entity);
+      if(e1) throw e1;
+      // Borrar los que ya no existen localmente
+      const toDelete = (remote||[]).filter(r=>!localIds.has(r.id)).map(r=>r.id);
+      if(toDelete.length){
+        const {error: e2} = await supa.from('flotacontrol').delete().in('id', toDelete);
+        if(e2) throw e2;
+      }
+      // Upsert de todos los registros locales
+      if(local.length){
+        const rows = local.map(r=>({id:r.id, entity, data:r, updated_at:new Date().toISOString()}));
+        const {error: e3} = await supa.from('flotacontrol').upsert(rows);
+        if(e3) throw e3;
+      }
+    }
+    setCloudDot('ok');
+    updateCloudStatusText();
+  } catch(e){
+    console.error('Sync error:', e);
+    setCloudDot('error', e.message);
+    updateCloudStatusText();
+  } finally {
+    isSyncing = false;
+  }
+}
+
+/* Trae todos los datos de la nube y reemplaza los locales */
+async function pullFromCloud(){
+  if(!supa){ alert('No hay conexión configurada.'); return; }
+  setCloudDot('syncing');
+  try {
+    const {data, error} = await supa.from('flotacontrol').select('*');
+    if(error) throw error;
+    db.units       = (data||[]).filter(r=>r.entity==='units').map(r=>r.data);
+    db.maintenance = (data||[]).filter(r=>r.entity==='maintenance').map(r=>r.data);
+    db.tires       = (data||[]).filter(r=>r.entity==='tires').map(r=>r.data);
+    db.docs        = (data||[]).filter(r=>r.entity==='docs').map(r=>r.data);
+    // Guardar en localStorage sin re-disparar sync
+    localStorage.setItem(STORE_KEY, JSON.stringify(db));
+    renderAll();
+    setCloudDot('ok');
+    updateCloudStatusText();
+    alert('✓ Datos traídos de la nube correctamente.');
+  } catch(e){
+    console.error(e);
+    setCloudDot('error', e.message);
+    alert('Error al traer datos: ' + e.message);
+  }
+}
+
+async function manualSync(){
+  if(!supa){ alert('Primero configura y guarda las credenciales.'); return; }
+  await syncToCloud();
+  alert('✓ Sincronización completada.');
+}
+
+/* Sync automático al recuperar conexión */
+window.addEventListener('online', ()=>{ if(supa) scheduleSync(); });
+
+/* ============================================================
+   EXPORTAR / IMPORTAR RESPALDO JSON
+   ============================================================ */
+function exportBackup(){
+  const blob = new Blob([JSON.stringify(db, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `flotacontrol_backup_${today()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function importBackup(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try{
+      const imported = JSON.parse(ev.target.result);
+      if(!imported.units||!imported.maintenance){ alert('Archivo inválido.'); return; }
+      if(!confirm('Esto reemplazará todos los datos actuales. ¿Continuar?')) return;
+      db = imported; saveDB(); renderAll();
+      alert('✓ Respaldo importado correctamente.');
+    } catch(err){ alert('Error al leer archivo: ' + err.message); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+/* ============================================================
+   INICIALIZACIÓN
+   ============================================================ */
+loadDB();
+renderAll();
+// Iniciar Supabase después de renderizar (para que el indicador esté disponible)
+initSupabase();
+// Si hay conexión configurada, traer datos remotos automáticamente al abrir
+if(supa){
+  (async ()=>{
+    try {
+      const {data, error} = await supa.from('flotacontrol').select('*').limit(1);
+      if(error) throw error;
+      // Solo tirar de la nube si hay datos ahí
+      const {data: allData} = await supa.from('flotacontrol').select('*');
+      if(allData && allData.length > 0){
+        db.units       = allData.filter(r=>r.entity==='units').map(r=>r.data);
+        db.maintenance = allData.filter(r=>r.entity==='maintenance').map(r=>r.data);
+        db.tires       = allData.filter(r=>r.entity==='tires').map(r=>r.data);
+        db.docs        = allData.filter(r=>r.entity==='docs').map(r=>r.data);
+        localStorage.setItem(STORE_KEY, JSON.stringify(db));
+        renderAll();
+        setCloudDot('ok');
+      } else {
+        // La nube está vacía, subir lo local
+        await syncToCloud();
+      }
+    } catch(e){
+      console.warn('No se pudo sincronizar al iniciar:', e.message);
+      setCloudDot('error', e.message);
+    }
+  })();
+}
+</script>
+</body>
+</html>
