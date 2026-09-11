@@ -690,7 +690,7 @@ alter table flotacontrol disable row level security;</pre>
       <h3 class="modal-title" id="sendDocsTitle">Enviar documentos por WhatsApp</h3>
       <button class="modal-close" onclick="closeModal('sendDocsModal')">×</button>
     </div>
-    <div class="form-group" style="margin-bottom:12px">
+    <div class="form-group" id="sendDocsContactSection" style="margin-bottom:12px">
       <label>Contacto destinatario *</label>
       <div style="display:flex;gap:6px">
         <select id="sendDocsContact" style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px"></select>
@@ -2132,7 +2132,17 @@ function openSendDocsWhatsApp(preselectDocId){
   if(!unitDocs.length){ alert('Esta unidad no tiene documentos para enviar.'); return; }
 
   document.getElementById('sendDocsTitle').textContent = `Enviar documentos · ${u.plate}`;
-  fillSendDocsContactSelect();
+  // Detectar si el dispositivo puede compartir archivos (móvil con Share API)
+  const useShare = canShareFiles();
+  const contactSection = document.getElementById('sendDocsContactSection');
+  if(useShare){
+    // En móvil el contacto lo elige WhatsApp: ocultamos el selector
+    contactSection.style.display = 'none';
+  } else {
+    // En PC el contacto es obligatorio para armar el enlace wa.me/<número>
+    contactSection.style.display = '';
+    fillSendDocsContactSelect();
+  }
 
   const list = document.getElementById('sendDocsList');
   list.innerHTML = unitDocs.map(d=>{
@@ -2152,8 +2162,8 @@ function openSendDocsWhatsApp(preselectDocId){
     </div>`;
   }).join('');
 
-  document.getElementById('sendDocsHint').textContent = canShareFiles()
-    ? '📱 Este dispositivo soporta adjuntar archivos: al enviar se abrirá WhatsApp con los PDF/imágenes ya adjuntos.'
+  document.getElementById('sendDocsHint').textContent = useShare
+    ? '📱 Al enviar se abrirá el selector de compartir. Elige WhatsApp → elige el contacto → los PDF/imágenes se adjuntan solos con el texto.'
     : '💻 En PC WhatsApp Web no permite adjuntar archivos automáticamente: se abrirá el chat con el mensaje y los archivos se descargarán para que los arrastres al chat.';
 
   openModal('sendDocsModal');
@@ -2181,10 +2191,6 @@ function sendSingleDocWhatsApp(id){
 
 /* Lógica principal de envío */
 async function confirmSendDocsWhatsApp(){
-  const contactId = document.getElementById('sendDocsContact').value;
-  if(!contactId){ alert('Selecciona un contacto destinatario.'); return; }
-  const contact = db.contacts.find(c=>c.id===contactId);
-  if(!contact){ alert('Contacto no encontrado.'); return; }
   const selectedIds = getSelectedSendDocs();
   if(!selectedIds.length){ alert('Selecciona al menos un documento para enviar.'); return; }
 
@@ -2208,8 +2214,11 @@ async function confirmSendDocsWhatsApp(){
     if(!cont) return;
   }
 
-  // Camino 1: Móvil con soporte de compartir archivos → adjunta todo automáticamente
-  if(files.length && canShareFiles()){
+  const useShare = canShareFiles();
+
+  // Camino 1: Móvil con soporte de compartir archivos.
+  // WhatsApp muestra su propio selector de contactos: no necesitamos uno guardado.
+  if(useShare && files.length){
     try{
       await navigator.share({files, text: message, title: `Documentos ${unit.plate}`});
       closeModal('sendDocsModal');
@@ -2217,12 +2226,29 @@ async function confirmSendDocsWhatsApp(){
     } catch(err){
       // Usuario canceló el share sheet: no hacer nada más
       if(err && err.name === 'AbortError'){ return; }
-      // Otro error: caer al fallback wa.me
-      console.warn('Share API falló, usando fallback wa.me:', err);
+      // Otro error inesperado
+      console.warn('Share API falló:', err);
+      alert('No se pudo abrir el compartir del sistema.\n\n' + (err && err.message ? err.message : 'Error desconocido.'));
+      return;
+    }
+  }
+  // Si soporta share pero no hay archivos adjuntos, usar share sin archivos (solo texto)
+  if(useShare && !files.length){
+    try{
+      await navigator.share({text: message, title: `Documentos ${unit.plate}`});
+      closeModal('sendDocsModal');
+      return;
+    } catch(err){
+      if(err && err.name === 'AbortError'){ return; }
+      // Cae al fallback si falla
     }
   }
 
-  // Camino 2: PC (o móvil sin Share API) → abrir wa.me del contacto + auto-descargar archivos
+  // Camino 2: PC (o móvil sin Share API) → aquí SÍ requerimos contacto guardado
+  const contactId = document.getElementById('sendDocsContact').value;
+  if(!contactId){ alert('Selecciona un contacto destinatario.'); return; }
+  const contact = db.contacts.find(c=>c.id===contactId);
+  if(!contact){ alert('Contacto no encontrado.'); return; }
   const phoneDigits = (contact.phone||'').replace(/[^0-9]/g,'');
   if(!phoneDigits){ alert('El contacto no tiene un número válido.'); return; }
   const waUrl = `https://wa.me/${phoneDigits}?text=${encodeURIComponent(message)}`;
