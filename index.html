@@ -696,13 +696,13 @@ alter table flotacontrol disable row level security;</pre>
         <select id="sendDocsContact" style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px"></select>
         <button type="button" class="btn btn-secondary btn-sm" onclick="openContactsModal()">+ Gestionar</button>
       </div>
-      <span class="form-hint">Elige un contacto guardado o agrega uno nuevo.</span>
     </div>
+    <div style="margin-bottom:8px;font-weight:500;font-size:13px">Documentos a enviar:</div>
     <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">
       <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAllSendDocs(true)">Marcar todos</button>
       <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAllSendDocs(false)">Desmarcar todos</button>
     </div>
-    <div id="sendDocsList" style="max-height:340px;overflow-y:auto"></div>
+    <div id="sendDocsList" style="max-height:300px;overflow-y:auto"></div>
     <div class="form-hint" style="margin-top:10px" id="sendDocsHint"></div>
     <div class="modal-footer">
       <button type="button" class="btn btn-secondary" onclick="closeModal('sendDocsModal')">Cancelar</button>
@@ -724,7 +724,7 @@ alter table flotacontrol disable row level security;</pre>
         <div class="form-group"><label>Nombre *</label><input type="text" id="contactName" required placeholder="Ej: Mecánico Juan"></div>
         <div class="form-group"><label>Número con código país *</label>
           <input type="tel" id="contactPhone" required placeholder="+51987654321" pattern="\+?[0-9\s\-]{7,20}">
-          <span class="form-hint">Incluye el código de país. Ej: +51987654321</span>
+          <span class="form-hint">Incluye código de país. Ej: +51987654321</span>
         </div>
       </div>
       <div style="display:flex;gap:6px;justify-content:flex-end;margin:12px 0">
@@ -741,6 +741,8 @@ alter table flotacontrol disable row level security;</pre>
   </div>
 </div>
 
+<!-- ============ MODAL CONTACTOS WHATSAPP ELIMINADO (flujo simplificado) ============ -->
+
 <script>
 /* ============================================================
    ESTADO GLOBAL Y PERSISTENCIA (localStorage)
@@ -753,11 +755,11 @@ function loadDB(){
   if(raw){ try{ db = JSON.parse(raw); }catch(e){ seedData(); } }
   else { seedData(); }
   // Compatibilidad hacia atrás: garantizar arrays presentes
-  if(!Array.isArray(db.contacts)) db.contacts = [];
   if(!Array.isArray(db.units)) db.units = [];
   if(!Array.isArray(db.maintenance)) db.maintenance = [];
   if(!Array.isArray(db.tires)) db.tires = [];
   if(!Array.isArray(db.docs)) db.docs = [];
+  if(!Array.isArray(db.contacts)) db.contacts = [];
 }
 function saveDB(){
   localStorage.setItem(STORE_KEY, JSON.stringify(db));
@@ -1710,7 +1712,7 @@ function renderDocsDetail(){
         </div>
         <div class="doc-item-actions">
           ${fileBtn}
-          <button class="btn btn-primary btn-sm" onclick="openSendDocsWhatsApp('${d.id}')" title="Enviar por WhatsApp">📱</button>
+          <button class="btn btn-primary btn-sm" onclick="sendSingleDocWhatsApp('${d.id}')" title="Enviar por WhatsApp">📱</button>
           <button class="btn btn-secondary btn-sm" onclick="openDocModal('${d.id}')" title="Editar">✏</button>
           <button class="btn btn-danger btn-sm" onclick="deleteDoc('${d.id}')" title="Eliminar">🗑</button>
         </div>
@@ -2047,7 +2049,6 @@ function saveContact(e){
   saveDB();
   resetContactForm();
   renderContactsList();
-  // Refrescar el select si el modal de envío está abierto
   if(document.getElementById('sendDocsModal').classList.contains('active')) fillSendDocsContactSelect();
 }
 async function deleteContact(id){
@@ -2060,9 +2061,14 @@ async function deleteContact(id){
 }
 
 /* ============================================================
-   ENVÍO DE DOCUMENTOS POR WHATSAPP
-   - Móvil (soporta navigator.canShare({files})): adjunta archivos reales.
-   - PC / fallback: abre wa.me con texto y ofrece botones de descarga.
+   ENVÍO DE DOCUMENTOS POR WHATSAPP CON ARCHIVOS ADJUNTOS
+   - Móvil (Android/iOS con app WhatsApp): navigator.share({files,text})
+     abre el selector nativo → eliges WhatsApp → eliges contacto →
+     los archivos aparecen adjuntos con el texto pre-cargado.
+   - PC: WhatsApp Web NO acepta adjuntar archivos por URL (limitación
+     de WhatsApp, no del código). Se abre el chat del contacto con el
+     texto pre-cargado y se descargan los archivos automáticamente
+     para arrastrarlos al chat.
    ============================================================ */
 let sendDocsUnitId = null;
 
@@ -2071,11 +2077,53 @@ function fillSendDocsContactSelect(){
   const prev = sel.value;
   sel.innerHTML = db.contacts.length
     ? '<option value="">Seleccionar contacto...</option>' + db.contacts.map(c=>`<option value="${c.id}">${c.name} · ${c.phone}</option>`).join('')
-    : '<option value="">— No hay contactos guardados —</option>';
+    : '<option value="">— Sin contactos. Usa "+ Gestionar" —</option>';
   if(prev) sel.value = prev;
 }
 
-/* Abre el modal. Si se pasa un docId, arranca con ese único doc marcado */
+/* Detecta si el dispositivo puede compartir archivos vía Share API */
+function canShareFiles(){
+  try{
+    if(!navigator.canShare) return false;
+    // Prueba con un archivo dummy
+    const test = new File(['x'], 'test.txt', {type:'text/plain'});
+    return navigator.canShare({files:[test]});
+  } catch(e){ return false; }
+}
+
+/* Mensaje corto solicitado por el usuario */
+function buildShortDocsMessage(unit, docs){
+  const types = docs.map(d=>d.type);
+  // Formato "A, B y C"
+  let list;
+  if(types.length === 1) list = types[0];
+  else if(types.length === 2) list = types.join(' y ');
+  else list = types.slice(0,-1).join(', ') + ' y ' + types[types.length-1];
+  const unitLabel = unit.plate + ([unit.brand,unit.model].filter(Boolean).length ? ' (' + [unit.brand,unit.model].filter(Boolean).join(' ') + ')' : '');
+  return `Se adjuntan los documentos ${list} de la unidad ${unitLabel}.`;
+}
+
+/* Convierte data:URL (base64) a File para navigator.share */
+function dataURLtoFile(dataUrl, filename, mime){
+  const arr = dataUrl.split(',');
+  const bstr = atob(arr[1]);
+  const u8 = new Uint8Array(bstr.length);
+  for(let i=0;i<bstr.length;i++) u8[i] = bstr.charCodeAt(i);
+  const type = mime || (arr[0].match(/:(.*?);/)||[])[1] || 'application/octet-stream';
+  return new File([u8], filename, {type});
+}
+
+/* Descarga automática de un archivo desde data:URL */
+function autoDownloadDataUrl(dataUrl, filename){
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = filename || 'documento';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+/* Abre el modal. Si se pasa un docId, arranca con ese doc marcado */
 function openSendDocsWhatsApp(preselectDocId){
   if(!currentDocsUnitId){ alert('Primero abre una unidad.'); return; }
   sendDocsUnitId = currentDocsUnitId;
@@ -2095,7 +2143,7 @@ function openSendDocsWhatsApp(preselectDocId){
       const badge = s.level==='ok'?'badge-ok':(s.level==='warn'?'badge-warn':'badge-danger');
       extra = ` <span class="badge ${badge}" style="font-size:10px">${fmtDate(d.expiry)}</span>`;
     }
-    const fileTag = d.file ? ' 📎' : '';
+    const fileTag = d.file ? ' 📎' : ' <span class="doc-item-meta" style="color:#b91c1c">(sin archivo)</span>';
     return `<div class="doc-select-row">
       <input type="checkbox" id="sendDoc_${d.id}" value="${d.id}" ${checked}>
       <label for="sendDoc_${d.id}"><strong>${d.type}</strong>${extra}${fileTag}
@@ -2104,10 +2152,9 @@ function openSendDocsWhatsApp(preselectDocId){
     </div>`;
   }).join('');
 
-  const hasShareFiles = !!(navigator.canShare && navigator.share);
-  document.getElementById('sendDocsHint').textContent = hasShareFiles
-    ? 'En este dispositivo se adjuntarán los archivos escaneados directamente en WhatsApp.'
-    : 'En este dispositivo se enviará un mensaje de texto con el detalle. Los archivos escaneados se abrirán aparte para que los adjuntes manualmente.';
+  document.getElementById('sendDocsHint').textContent = canShareFiles()
+    ? '📱 Este dispositivo soporta adjuntar archivos: al enviar se abrirá WhatsApp con los PDF/imágenes ya adjuntos.'
+    : '💻 En PC WhatsApp Web no permite adjuntar archivos automáticamente: se abrirá el chat con el mensaje y los archivos se descargarán para que los arrastres al chat.';
 
   openModal('sendDocsModal');
 }
@@ -2120,35 +2167,19 @@ function getSelectedSendDocs(){
   return [...document.querySelectorAll('#sendDocsList input[type=checkbox]:checked')].map(cb=>cb.value);
 }
 
-/* Convierte data:URL (base64) a File para navigator.share */
-function dataURLtoFile(dataUrl, filename, mime){
-  const arr = dataUrl.split(',');
-  const bstr = atob(arr[1]);
-  const u8 = new Uint8Array(bstr.length);
-  for(let i=0;i<bstr.length;i++) u8[i] = bstr.charCodeAt(i);
-  return new File([u8], filename, {type: mime || (arr[0].match(/:(.*?);/)||[])[1] || 'application/octet-stream'});
+/* Envío individual desde el botón 📱 de cada fila: abre el modal con ese doc preseleccionado */
+function sendSingleDocWhatsApp(id){
+  const d = db.docs.find(x=>x.id===id);
+  if(!d) return;
+  // Asegurar que estemos en el detalle de la unidad correcta
+  if(currentDocsUnitId !== d.unitId){
+    currentDocsUnitId = d.unitId;
+    renderDocs();
+  }
+  openSendDocsWhatsApp(id);
 }
 
-function buildDocsMessage(unit, docs, contactName){
-  let txt = `🚛 *DOCUMENTOS - ${unit.plate}*\n`;
-  if(unit.brand||unit.model) txt += `${[unit.brand,unit.model].filter(Boolean).join(' ')}\n`;
-  txt += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-  docs.forEach((d,i)=>{
-    txt += `${i+1}. *${d.type}*\n`;
-    txt += `   Emisión: ${fmtDate(d.issue)}\n`;
-    if(d.expiry){
-      const s = dateStatus(d.expiry);
-      const estado = s.level==='ok'?'✅ Vigente':(s.level==='warn'?'⚠ Próx. a vencer':'❌ Vencido');
-      txt += `   Vence: ${fmtDate(d.expiry)} (${estado} - ${s.text})\n`;
-    }
-    if(d.notes) txt += `   📝 ${d.notes}\n`;
-    txt += `\n`;
-  });
-  txt += `━━━━━━━━━━━━━━━━━━━━\n`;
-  txt += `📅 Generado: ${fmtDate(today())}\nFlotaControl`;
-  return txt;
-}
-
+/* Lógica principal de envío */
 async function confirmSendDocsWhatsApp(){
   const contactId = document.getElementById('sendDocsContact').value;
   if(!contactId){ alert('Selecciona un contacto destinatario.'); return; }
@@ -2159,52 +2190,53 @@ async function confirmSendDocsWhatsApp(){
 
   const unit = getUnit(sendDocsUnitId);
   const docsToSend = db.docs.filter(d=>selectedIds.includes(d.id));
-  const message = buildDocsMessage(unit, docsToSend, contact.name);
-  // Normalizar número: dejar solo dígitos (wa.me admite formato internacional sin +)
-  const phoneDigits = (contact.phone||'').replace(/[^0-9]/g,'');
+  const message = buildShortDocsMessage(unit, docsToSend);
 
-  // Intento 1: Web Share API con archivos (móvil moderno)
+  // Preparar los archivos (solo los que tienen adjunto)
   const files = [];
+  const docsWithoutFile = [];
   for(const d of docsToSend){
     if(d.file && d.fileName){
-      try{ files.push(dataURLtoFile(d.file, d.fileName, d.fileType)); }catch(e){ /* ignora */ }
+      try{ files.push(dataURLtoFile(d.file, d.fileName, d.fileType)); }
+      catch(e){ console.warn('No se pudo convertir archivo', d.fileName, e); }
+    } else {
+      docsWithoutFile.push(d.type);
     }
   }
-  if(files.length && navigator.canShare && navigator.canShare({files})){
+  if(docsWithoutFile.length){
+    const cont = confirm(`Los siguientes documentos no tienen archivo escaneado adjunto:\n\n• ${docsWithoutFile.join('\n• ')}\n\n¿Continuar enviando solo los que sí tienen archivo?`);
+    if(!cont) return;
+  }
+
+  // Camino 1: Móvil con soporte de compartir archivos → adjunta todo automáticamente
+  if(files.length && canShareFiles()){
     try{
       await navigator.share({files, text: message, title: `Documentos ${unit.plate}`});
       closeModal('sendDocsModal');
       return;
     } catch(err){
-      // Usuario canceló o falló: caer al fallback wa.me
+      // Usuario canceló el share sheet: no hacer nada más
       if(err && err.name === 'AbortError'){ return; }
+      // Otro error: caer al fallback wa.me
+      console.warn('Share API falló, usando fallback wa.me:', err);
     }
   }
 
-  // Fallback: abrir wa.me con el mensaje al contacto elegido
+  // Camino 2: PC (o móvil sin Share API) → abrir wa.me del contacto + auto-descargar archivos
+  const phoneDigits = (contact.phone||'').replace(/[^0-9]/g,'');
+  if(!phoneDigits){ alert('El contacto no tiene un número válido.'); return; }
   const waUrl = `https://wa.me/${phoneDigits}?text=${encodeURIComponent(message)}`;
   window.open(waUrl, '_blank');
 
-  // Si hay archivos adjuntos, abrirlos en pestañas nuevas para que el usuario los descargue/adjunte
-  const withFiles = docsToSend.filter(d=>d.file);
-  if(withFiles.length){
+  // Descargar automáticamente cada archivo con un pequeño delay entre uno y otro
+  if(files.length){
     setTimeout(()=>{
-      alert(`Se abrió WhatsApp con el mensaje.\n\nA continuación se abrirán ${withFiles.length} archivo(s) en pestañas nuevas para que los adjuntes manualmente al chat.`);
-      withFiles.forEach(d=>{
-        const w = window.open();
-        if(!w) return;
-        if(d.fileType && d.fileType.startsWith('image/')){
-          w.document.write(`<html><head><title>${d.fileName}</title></head>
-            <body style="margin:0;background:#222;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;color:#fff;font-family:Arial">
-            <p style="padding:10px">${d.type} - ${unit.plate}</p>
-            <img src="${d.file}" style="max-width:100%;max-height:80vh">
-            <a href="${d.file}" download="${d.fileName}" style="margin-top:12px;background:#25D366;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none">⬇ Descargar</a>
-            </body></html>`);
-        } else {
-          w.location.href = d.file;
-        }
+      alert(`WhatsApp Web se abrió con el mensaje al contacto "${contact.name}".\n\nWhatsApp no permite adjuntar archivos automáticamente en PC, así que se descargarán ${files.length} archivo(s) a tu carpeta de Descargas para que los arrastres al chat.`);
+      docsToSend.forEach((d, i)=>{
+        if(!d.file) return;
+        setTimeout(()=>{ autoDownloadDataUrl(d.file, d.fileName || (unit.plate+'_'+d.type+'.pdf')); }, i*350);
       });
-    }, 400);
+    }, 500);
   }
   closeModal('sendDocsModal');
 }
