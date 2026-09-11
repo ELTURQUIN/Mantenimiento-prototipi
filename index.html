@@ -103,6 +103,34 @@ tr:hover{background:#f9fafb}
 .unit-km{font-size:20px;font-weight:600;margin:8px 0}
 .unit-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 
+/* ============ DOCUMENTOS POR UNIDAD ============ */
+.docs-units-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.doc-unit-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:14px;border-top:3px solid var(--primary);cursor:pointer;transition:transform .12s,box-shadow .12s;
+  display:flex;flex-direction:column;gap:6px}
+.doc-unit-card:hover{transform:translateY(-2px);box-shadow:0 6px 14px rgba(0,0,0,.12)}
+.doc-unit-card.status-warn{border-top-color:var(--warning)}
+.doc-unit-card.status-danger{border-top-color:var(--danger)}
+.doc-unit-plate{font-size:17px;font-weight:700;letter-spacing:1px}
+.doc-unit-sub{color:var(--muted);font-size:12px}
+.doc-unit-counter{margin-top:6px;font-size:13px;color:#374151}
+.doc-type-block{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:14px;margin-bottom:12px}
+.doc-type-title{font-size:15px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.doc-item-row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:8px 0;border-bottom:1px solid var(--border)}
+.doc-item-row:last-child{border-bottom:none}
+.doc-item-meta{font-size:12px;color:var(--muted)}
+.doc-item-actions{display:flex;gap:4px;flex-wrap:wrap}
+.doc-empty-type{color:var(--muted);font-size:12px;font-style:italic}
+.doc-select-row{display:flex;align-items:flex-start;gap:8px;padding:8px;background:#f9fafb;border-radius:6px;margin-bottom:6px}
+.doc-select-row input[type=checkbox]{margin-top:3px}
+.doc-select-row label{flex:1;font-size:13px;cursor:pointer}
+@media(max-width:600px){
+  .docs-units-grid{grid-template-columns:1fr}
+  .doc-item-row{flex-direction:column;align-items:flex-start}
+}
+
 /* ============ MODAL ============ */
 .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;
   justify-content:center;z-index:1000;padding:16px}
@@ -283,12 +311,31 @@ tr:hover{background:#f9fafb}
 
       <!-- ============ DOCUMENTOS ============ -->
       <section id="view-documentos">
-        <div class="card">
+        <!-- Vista lista de unidades -->
+        <div class="card" id="docsUnitsView">
           <div class="card-header">
-            <h3 class="card-title">Documentación</h3>
-            <button class="btn btn-primary" onclick="openDocModal()">+ Agregar documento</button>
+            <h3 class="card-title">Documentación por unidad</h3>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-secondary" onclick="openContactsModal()">📇 Contactos WhatsApp</button>
+              <button class="btn btn-primary" onclick="openDocModal()">+ Agregar documento</button>
+            </div>
           </div>
-          <div class="table-wrap" id="docsTable"></div>
+          <div id="docsUnitsList"></div>
+        </div>
+
+        <!-- Vista detalle de una unidad (oculta por defecto) -->
+        <div class="card" id="docsDetailView" style="display:none">
+          <div class="card-header">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-secondary btn-sm" onclick="closeDocsDetail()">← Volver</button>
+              <h3 class="card-title" id="docsDetailTitle">Documentos</h3>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" onclick="openSendDocsWhatsApp()">📱 Enviar por WhatsApp</button>
+              <button class="btn btn-primary btn-sm" onclick="openDocModalForCurrentUnit()">+ Agregar documento</button>
+            </div>
+          </div>
+          <div id="docsDetailBody"></div>
         </div>
       </section>
 
@@ -603,15 +650,22 @@ alter table flotacontrol disable row level security;</pre>
       <div class="form-grid">
         <div class="form-group"><label>Unidad *</label><select id="docUnit" required><option value="">Seleccionar...</option></select></div>
         <div class="form-group"><label>Tipo *</label>
-          <select id="docType" required>
+          <select id="docType" required onchange="onDocTypeChange()">
             <option value="">Seleccionar...</option>
             <option>SOAT</option><option>Revisión técnica</option>
-            <option>Tarjeta de propiedad</option><option>Seguro</option>
-            <option>Permiso</option><option>Otro</option>
+            <option>Tarjeta de propiedad</option><option>Tarjeta de circulación</option>
+            <option>Seguro</option><option>Permiso</option><option>Otro</option>
           </select>
         </div>
         <div class="form-group"><label>Fecha emisión *</label><input type="date" id="docIssue" required></div>
-        <div class="form-group"><label>Fecha vencimiento *</label><input type="date" id="docExpiry" required></div>
+        <div class="form-group" id="docExpiryOptionalWrap" style="display:none">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="docHasExpiry" onchange="onDocHasExpiryChange()">
+            ¿Tiene fecha de vencimiento?
+          </label>
+          <span class="form-hint">Actívalo solo si este documento vence.</span>
+        </div>
+        <div class="form-group" id="docExpiryWrap"><label id="docExpiryLabel">Fecha vencimiento *</label><input type="date" id="docExpiry"></div>
         <div class="form-group"><label>Costo (S/)</label><input type="number" step="0.01" min="0" id="docCost"></div>
         <div class="form-group full">
           <label>📎 Documento escaneado (PDF o imagen)</label>
@@ -629,17 +683,81 @@ alter table flotacontrol disable row level security;</pre>
   </div>
 </div>
 
+<!-- ============ MODAL ENVIAR DOCUMENTOS POR WHATSAPP ============ -->
+<div class="modal-backdrop" id="sendDocsModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="sendDocsTitle">Enviar documentos por WhatsApp</h3>
+      <button class="modal-close" onclick="closeModal('sendDocsModal')">×</button>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Contacto destinatario *</label>
+      <div style="display:flex;gap:6px">
+        <select id="sendDocsContact" style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px"></select>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openContactsModal()">+ Gestionar</button>
+      </div>
+      <span class="form-hint">Elige un contacto guardado o agrega uno nuevo.</span>
+    </div>
+    <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAllSendDocs(true)">Marcar todos</button>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAllSendDocs(false)">Desmarcar todos</button>
+    </div>
+    <div id="sendDocsList" style="max-height:340px;overflow-y:auto"></div>
+    <div class="form-hint" style="margin-top:10px" id="sendDocsHint"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('sendDocsModal')">Cancelar</button>
+      <button type="button" class="btn btn-primary" onclick="confirmSendDocsWhatsApp()">📱 Enviar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL CONTACTOS WHATSAPP ============ -->
+<div class="modal-backdrop" id="contactsModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Contactos WhatsApp</h3>
+      <button class="modal-close" onclick="closeModal('contactsModal')">×</button>
+    </div>
+    <form id="contactForm" onsubmit="saveContact(event)">
+      <input type="hidden" id="contactId">
+      <div class="form-grid">
+        <div class="form-group"><label>Nombre *</label><input type="text" id="contactName" required placeholder="Ej: Mecánico Juan"></div>
+        <div class="form-group"><label>Número con código país *</label>
+          <input type="tel" id="contactPhone" required placeholder="+51987654321" pattern="\+?[0-9\s\-]{7,20}">
+          <span class="form-hint">Incluye el código de país. Ej: +51987654321</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;justify-content:flex-end;margin:12px 0">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="resetContactForm()">Limpiar</button>
+        <button type="submit" class="btn btn-primary btn-sm" id="contactSubmitBtn">+ Agregar contacto</button>
+      </div>
+    </form>
+    <hr style="border:none;border-top:1px solid var(--border);margin:10px 0">
+    <h4 style="font-size:14px;margin-bottom:8px">Contactos guardados</h4>
+    <div id="contactsList" style="max-height:260px;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-primary" onclick="closeModal('contactsModal')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ============================================================
    ESTADO GLOBAL Y PERSISTENCIA (localStorage)
    ============================================================ */
 const STORE_KEY = 'flotaControl_v1';
-let db = { units:[], maintenance:[], tires:[], docs:[] };
+let db = { units:[], maintenance:[], tires:[], docs:[], contacts:[] };
 
 function loadDB(){
   const raw = localStorage.getItem(STORE_KEY);
   if(raw){ try{ db = JSON.parse(raw); }catch(e){ seedData(); } }
   else { seedData(); }
+  // Compatibilidad hacia atrás: garantizar arrays presentes
+  if(!Array.isArray(db.contacts)) db.contacts = [];
+  if(!Array.isArray(db.units)) db.units = [];
+  if(!Array.isArray(db.maintenance)) db.maintenance = [];
+  if(!Array.isArray(db.tires)) db.tires = [];
+  if(!Array.isArray(db.docs)) db.docs = [];
 }
 function saveDB(){
   localStorage.setItem(STORE_KEY, JSON.stringify(db));
@@ -665,6 +783,7 @@ function seedData(){
   db.maintenance = [];
   db.tires = [];
   db.docs = [];
+  db.contacts = [];
   saveDB();
 }
 
@@ -689,7 +808,7 @@ function restoreBaseUnits(){
 function resetToMyUnits(){
   if(!confirm('Esto BORRARÁ todos los datos actuales y cargará las 6 unidades reales. ¿Continuar?')) return;
   localStorage.removeItem(STORE_KEY);
-  db = { units:[], maintenance:[], tires:[], docs:[] };
+  db = { units:[], maintenance:[], tires:[], docs:[], contacts:[] };
   seedData(); renderAll();
   alert('✓ 6 unidades cargadas correctamente.');
 }
@@ -1029,21 +1148,89 @@ async function deleteTire(id){
 /* ============================================================
    DOCUMENTOS - CRUD
    ============================================================ */
-function openDocModal(id){
+/* Reglas de vencimiento por tipo:
+   - 'required'   → SOAT, Revisión técnica, Tarjeta de circulación
+   - 'optional'   → Seguro, Otro, Permiso (checkbox "¿Tiene vencimiento?")
+   - 'none'       → Tarjeta de propiedad (no vence, se oculta el campo) */
+function getDocExpiryRule(type){
+  if(['SOAT','Revisión técnica','Tarjeta de circulación'].includes(type)) return 'required';
+  if(type === 'Tarjeta de propiedad') return 'none';
+  return 'optional'; // Seguro, Permiso, Otro
+}
+/* Se dispara al cambiar el <select> de tipo dentro del modal de documento */
+function onDocTypeChange(){
+  const type = document.getElementById('docType').value;
+  const rule = getDocExpiryRule(type);
+  const wrapExpiry = document.getElementById('docExpiryWrap');
+  const wrapOpt = document.getElementById('docExpiryOptionalWrap');
+  const inpExpiry = document.getElementById('docExpiry');
+  const cbHas = document.getElementById('docHasExpiry');
+  const lblExpiry = document.getElementById('docExpiryLabel');
+
+  if(rule === 'required'){
+    wrapOpt.style.display = 'none';
+    wrapExpiry.style.display = '';
+    inpExpiry.required = true;
+    lblExpiry.textContent = 'Fecha vencimiento *';
+    cbHas.checked = false;
+  } else if(rule === 'none'){
+    wrapOpt.style.display = 'none';
+    wrapExpiry.style.display = 'none';
+    inpExpiry.required = false;
+    inpExpiry.value = '';
+    cbHas.checked = false;
+  } else { // optional
+    wrapOpt.style.display = '';
+    lblExpiry.textContent = 'Fecha vencimiento';
+    // Si ya tenía valor cargado (edición), mostrar; si no, ocultar hasta que marque el checkbox
+    if(inpExpiry.value){
+      cbHas.checked = true;
+      wrapExpiry.style.display = '';
+    } else {
+      cbHas.checked = false;
+      wrapExpiry.style.display = 'none';
+    }
+    inpExpiry.required = cbHas.checked;
+  }
+}
+/* Se dispara al marcar/desmarcar el checkbox "¿Tiene vencimiento?" */
+function onDocHasExpiryChange(){
+  const cb = document.getElementById('docHasExpiry');
+  const wrap = document.getElementById('docExpiryWrap');
+  const inp = document.getElementById('docExpiry');
+  if(cb.checked){
+    wrap.style.display = '';
+    inp.required = true;
+  } else {
+    wrap.style.display = 'none';
+    inp.required = false;
+    inp.value = '';
+  }
+}
+
+function openDocModal(id, preselectUnitId){
   document.getElementById('docForm').reset();
   document.getElementById('docId').value = '';
   document.getElementById('docFilePreview').innerHTML = '';
   document.getElementById('docModalTitle').textContent = id ? 'Editar Documento' : 'Agregar Documento';
   fillUnitSelect('docUnit');
+  // Reset visual del bloque de vencimiento
+  document.getElementById('docExpiryOptionalWrap').style.display = 'none';
+  document.getElementById('docExpiryWrap').style.display = '';
+  document.getElementById('docExpiry').required = true;
+  document.getElementById('docHasExpiry').checked = false;
+  document.getElementById('docExpiryLabel').textContent = 'Fecha vencimiento *';
+
   if(id){
     const d = db.docs.find(x=>x.id===id);
     document.getElementById('docId').value = d.id;
     document.getElementById('docUnit').value = d.unitId;
     document.getElementById('docType').value = d.type;
     document.getElementById('docIssue').value = d.issue;
-    document.getElementById('docExpiry').value = d.expiry;
+    document.getElementById('docExpiry').value = d.expiry || '';
     document.getElementById('docCost').value = d.cost||'';
     document.getElementById('docNotes').value = d.notes||'';
+    onDocTypeChange();
     if(d.file){
       document.getElementById('docFilePreview').innerHTML =
         `<div style="background:#f0f9ff;padding:8px;border-radius:6px;font-size:12px">
@@ -1052,8 +1239,14 @@ function openDocModal(id){
           <button type="button" class="btn btn-danger btn-sm" onclick="removeDocFile('${d.id}')">Quitar</button>
         </div>`;
     }
+  } else if(preselectUnitId){
+    document.getElementById('docUnit').value = preselectUnitId;
   }
   openModal('docModal');
+}
+/* Abre el modal ya con la unidad actualmente en detalle preseleccionada */
+function openDocModalForCurrentUnit(){
+  openDocModal(null, currentDocsUnitId);
 }
 /* Convierte el archivo a base64 y lo guarda temporalmente en el form */
 let tempDocFile = null;
@@ -1095,11 +1288,22 @@ function removeDocFile(id){
 function saveDoc(e){
   e.preventDefault();
   const id = document.getElementById('docId').value;
+  const type = document.getElementById('docType').value;
+  const rule = getDocExpiryRule(type);
+  // Determinar el valor final de expiry según la regla del tipo
+  let expiryVal = '';
+  if(rule === 'required'){
+    expiryVal = document.getElementById('docExpiry').value;
+  } else if(rule === 'optional'){
+    if(document.getElementById('docHasExpiry').checked){
+      expiryVal = document.getElementById('docExpiry').value;
+    }
+  } // 'none' → siempre vacío
   const data = {
     unitId: document.getElementById('docUnit').value,
-    type: document.getElementById('docType').value,
+    type: type,
     issue: document.getElementById('docIssue').value,
-    expiry: document.getElementById('docExpiry').value,
+    expiry: expiryVal,
     cost: Number(document.getElementById('docCost').value)||0,
     notes: document.getElementById('docNotes').value.trim()
   };
@@ -1409,40 +1613,114 @@ function renderTires(){
 /* ============================================================
    RENDER: DOCUMENTOS
    ============================================================ */
+/* Estado: qué unidad se está viendo actualmente en detalle (null = lista de unidades) */
+let currentDocsUnitId = null;
+
+/* Tipos de documento en el orden que se muestran */
+const DOC_TYPES_ORDER = ['SOAT','Revisión técnica','Tarjeta de propiedad','Tarjeta de circulación','Seguro','Permiso','Otro'];
+
+/* Devuelve el peor estado (danger > warn > ok) de todos los docs con vencimiento de una unidad */
+function unitDocsWorstStatus(unitId){
+  const docs = db.docs.filter(d=>d.unitId===unitId && d.expiry);
+  let worst = 'ok';
+  for(const d of docs){
+    const s = dateStatus(d.expiry);
+    if(!s) continue;
+    if(s.level==='danger') return 'danger';
+    if(s.level==='warn') worst = 'warn';
+  }
+  return worst;
+}
+
 function renderDocs(){
+  if(currentDocsUnitId) renderDocsDetail(); else renderDocsUnitsList();
+}
+
+/* Lista de unidades (vista principal del apartado Documentos) */
+function renderDocsUnitsList(){
+  document.getElementById('docsUnitsView').style.display = '';
+  document.getElementById('docsDetailView').style.display = 'none';
   const q = document.getElementById('globalSearch').value;
-  const filtered = db.docs.filter(d=>{
-    const u = getUnit(d.unitId);
-    return matchesSearch(d.type,q)||matchesSearch(d.notes,q)||(u&&matchesSearch(u.plate,q));
-  });
-  const el = document.getElementById('docsTable');
-  if(!filtered.length){ el.innerHTML = '<div class="empty">Sin documentos.</div>'; return; }
-  el.innerHTML = `
-    <table><thead><tr>
-      <th>Unidad</th><th>Tipo</th><th>Emisión</th><th>Vencimiento</th>
-      <th>Estado</th><th>Costo</th><th>Archivo</th><th>Observaciones</th><th>Acciones</th>
-    </tr></thead><tbody>
-    ${filtered.map(d=>{
-      const u = getUnit(d.unitId);
-      const s = dateStatus(d.expiry);
-      const label = s.level==='ok'?'Vigente':(s.level==='warn'?'Próx. a vencer':'Vencido');
-      const badge = s.level==='ok'?'badge-ok':(s.level==='warn'?'badge-warn':'badge-danger');
-      const fileCell = d.file
-        ? `<button class="btn btn-secondary btn-sm" onclick="viewDocFile('${d.id}')" title="Ver ${d.fileName}">📎 Ver</button>`
-        : '<span style="color:var(--muted);font-size:11px">Sin archivo</span>';
-      return `<tr>
-        <td>${u?u.plate:'?'}</td><td>${d.type}</td><td>${fmtDate(d.issue)}</td>
-        <td>${fmtDate(d.expiry)}</td>
-        <td><span class="badge ${badge}">${label}</span><div style="font-size:11px;color:var(--muted);margin-top:2px">${s.text}</div></td>
-        <td>${fmtMoney(d.cost)}</td>
-        <td>${fileCell}</td>
-        <td>${d.notes||'-'}</td>
-        <td class="table-actions">
-          <button class="btn btn-secondary btn-sm" onclick="openDocModal('${d.id}')">✏</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteDoc('${d.id}')">🗑</button>
-        </td>
-      </tr>`;
-    }).join('')}</tbody></table>`;
+  const units = db.units.filter(u=>matchesSearch(u.plate,q)||matchesSearch(u.brand,q)||matchesSearch(u.model,q));
+  const el = document.getElementById('docsUnitsList');
+  if(!units.length){ el.innerHTML = '<div class="empty">No hay unidades registradas.</div>'; return; }
+  el.innerHTML = `<div class="docs-units-grid">${units.map(u=>{
+    const total = db.docs.filter(d=>d.unitId===u.id).length;
+    const worst = unitDocsWorstStatus(u.id);
+    const statusClass = worst==='danger'?'status-danger':(worst==='warn'?'status-warn':'');
+    const badge = worst==='danger'?'<span class="badge badge-danger">Docs vencidos</span>'
+                : worst==='warn'?'<span class="badge badge-warn">Por vencer</span>'
+                : (total?'<span class="badge badge-ok">Al día</span>':'<span class="badge badge-gray">Sin docs</span>');
+    return `<div class="doc-unit-card ${statusClass}" onclick="openDocsDetail('${u.id}')">
+      <div class="doc-unit-plate">${u.plate||'-'}</div>
+      <div class="doc-unit-sub">${[u.brand,u.model].filter(Boolean).join(' ')||'-'}</div>
+      <div class="doc-unit-counter">📄 ${total} documento(s)</div>
+      <div>${badge}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+/* Abre el detalle de una unidad */
+function openDocsDetail(unitId){
+  currentDocsUnitId = unitId;
+  renderDocs();
+}
+function closeDocsDetail(){
+  currentDocsUnitId = null;
+  renderDocs();
+}
+
+/* Detalle: documentos agrupados por tipo para la unidad actual */
+function renderDocsDetail(){
+  const u = getUnit(currentDocsUnitId);
+  if(!u){ closeDocsDetail(); return; }
+  document.getElementById('docsUnitsView').style.display = 'none';
+  document.getElementById('docsDetailView').style.display = '';
+  document.getElementById('docsDetailTitle').textContent =
+    `Documentos · ${u.plate} ${[u.brand,u.model].filter(Boolean).join(' ')}`;
+
+  const unitDocs = db.docs.filter(d=>d.unitId===currentDocsUnitId);
+  const body = document.getElementById('docsDetailBody');
+  body.innerHTML = DOC_TYPES_ORDER.map(type=>{
+    const docsOfType = unitDocs.filter(d=>d.type===type);
+    const rule = getDocExpiryRule(type);
+    const ruleTag = rule==='required'
+      ? '<span class="badge badge-info" style="font-size:10px">Con vencimiento</span>'
+      : rule==='none'
+        ? '<span class="badge badge-gray" style="font-size:10px">No vence</span>'
+        : '<span class="badge badge-gray" style="font-size:10px">Vencimiento opcional</span>';
+    const rows = docsOfType.length ? docsOfType.map(d=>{
+      let statusHtml = '';
+      if(d.expiry){
+        const s = dateStatus(d.expiry);
+        const label = s.level==='ok'?'Vigente':(s.level==='warn'?'Próx. a vencer':'Vencido');
+        const badge = s.level==='ok'?'badge-ok':(s.level==='warn'?'badge-warn':'badge-danger');
+        statusHtml = `<span class="badge ${badge}">${label}</span> <span class="doc-item-meta">${s.text}</span>`;
+      } else {
+        statusHtml = '<span class="doc-item-meta">Sin fecha de vencimiento</span>';
+      }
+      const fileBtn = d.file
+        ? `<button class="btn btn-secondary btn-sm" onclick="viewDocFile('${d.id}')" title="Ver ${d.fileName||''}">📎 Ver</button>`
+        : '<span class="doc-item-meta">Sin archivo</span>';
+      return `<div class="doc-item-row">
+        <div style="flex:1;min-width:180px">
+          <div style="font-weight:500">Emisión: ${fmtDate(d.issue)}${d.expiry?' · Venc.: '+fmtDate(d.expiry):''}</div>
+          <div style="margin-top:4px">${statusHtml}</div>
+          ${d.notes?`<div class="doc-item-meta" style="margin-top:4px">📝 ${d.notes}</div>`:''}
+        </div>
+        <div class="doc-item-actions">
+          ${fileBtn}
+          <button class="btn btn-primary btn-sm" onclick="openSendDocsWhatsApp('${d.id}')" title="Enviar por WhatsApp">📱</button>
+          <button class="btn btn-secondary btn-sm" onclick="openDocModal('${d.id}')" title="Editar">✏</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteDoc('${d.id}')" title="Eliminar">🗑</button>
+        </div>
+      </div>`;
+    }).join('') : '<div class="doc-empty-type">No hay documentos de este tipo.</div>';
+    return `<div class="doc-type-block">
+      <div class="doc-type-title">📄 ${type} ${ruleTag}</div>
+      ${rows}
+    </div>`;
+  }).join('');
 }
 
 /* ============================================================
@@ -1717,6 +1995,220 @@ function printCurrentView(){
   document.getElementById('printDateHeader').textContent = 'Generado el ' + fmtDate(today());
   window.print();
 }
+
+/* ============================================================
+   CONTACTOS DE WHATSAPP - CRUD
+   ============================================================ */
+function openContactsModal(){
+  resetContactForm();
+  renderContactsList();
+  openModal('contactsModal');
+}
+function resetContactForm(){
+  document.getElementById('contactForm').reset();
+  document.getElementById('contactId').value = '';
+  document.getElementById('contactSubmitBtn').textContent = '+ Agregar contacto';
+}
+function renderContactsList(){
+  const el = document.getElementById('contactsList');
+  if(!db.contacts.length){ el.innerHTML = '<div class="empty" style="padding:14px">Aún no hay contactos guardados.</div>'; return; }
+  el.innerHTML = db.contacts.map(c=>`
+    <div class="doc-item-row" style="padding:8px 4px">
+      <div style="flex:1;min-width:160px">
+        <div style="font-weight:500">${c.name}</div>
+        <div class="doc-item-meta">${c.phone}</div>
+      </div>
+      <div class="doc-item-actions">
+        <button class="btn btn-secondary btn-sm" onclick="editContact('${c.id}')">✏</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteContact('${c.id}')">🗑</button>
+      </div>
+    </div>`).join('');
+}
+function editContact(id){
+  const c = db.contacts.find(x=>x.id===id);
+  if(!c) return;
+  document.getElementById('contactId').value = c.id;
+  document.getElementById('contactName').value = c.name;
+  document.getElementById('contactPhone').value = c.phone;
+  document.getElementById('contactSubmitBtn').textContent = 'Guardar cambios';
+}
+function saveContact(e){
+  e.preventDefault();
+  const id = document.getElementById('contactId').value;
+  const name = document.getElementById('contactName').value.trim();
+  const phone = document.getElementById('contactPhone').value.trim();
+  if(!name || !phone){ alert('Nombre y número son obligatorios.'); return; }
+  if(id){
+    const existing = db.contacts.find(c=>c.id===id);
+    Object.assign(existing, {name, phone});
+  } else {
+    db.contacts.push({id:uid(), name, phone});
+  }
+  saveDB();
+  resetContactForm();
+  renderContactsList();
+  // Refrescar el select si el modal de envío está abierto
+  if(document.getElementById('sendDocsModal').classList.contains('active')) fillSendDocsContactSelect();
+}
+async function deleteContact(id){
+  if(!confirm('¿Eliminar este contacto?')) return;
+  db.contacts = db.contacts.filter(c=>c.id!==id);
+  saveDB();
+  renderContactsList();
+  if(document.getElementById('sendDocsModal').classList.contains('active')) fillSendDocsContactSelect();
+  if(supa){ await deleteCloudRecord(id); schedulePull(); }
+}
+
+/* ============================================================
+   ENVÍO DE DOCUMENTOS POR WHATSAPP
+   - Móvil (soporta navigator.canShare({files})): adjunta archivos reales.
+   - PC / fallback: abre wa.me con texto y ofrece botones de descarga.
+   ============================================================ */
+let sendDocsUnitId = null;
+
+function fillSendDocsContactSelect(){
+  const sel = document.getElementById('sendDocsContact');
+  const prev = sel.value;
+  sel.innerHTML = db.contacts.length
+    ? '<option value="">Seleccionar contacto...</option>' + db.contacts.map(c=>`<option value="${c.id}">${c.name} · ${c.phone}</option>`).join('')
+    : '<option value="">— No hay contactos guardados —</option>';
+  if(prev) sel.value = prev;
+}
+
+/* Abre el modal. Si se pasa un docId, arranca con ese único doc marcado */
+function openSendDocsWhatsApp(preselectDocId){
+  if(!currentDocsUnitId){ alert('Primero abre una unidad.'); return; }
+  sendDocsUnitId = currentDocsUnitId;
+  const u = getUnit(sendDocsUnitId);
+  const unitDocs = db.docs.filter(d=>d.unitId===sendDocsUnitId);
+  if(!unitDocs.length){ alert('Esta unidad no tiene documentos para enviar.'); return; }
+
+  document.getElementById('sendDocsTitle').textContent = `Enviar documentos · ${u.plate}`;
+  fillSendDocsContactSelect();
+
+  const list = document.getElementById('sendDocsList');
+  list.innerHTML = unitDocs.map(d=>{
+    const checked = (preselectDocId && d.id===preselectDocId) ? 'checked' : '';
+    let extra = '';
+    if(d.expiry){
+      const s = dateStatus(d.expiry);
+      const badge = s.level==='ok'?'badge-ok':(s.level==='warn'?'badge-warn':'badge-danger');
+      extra = ` <span class="badge ${badge}" style="font-size:10px">${fmtDate(d.expiry)}</span>`;
+    }
+    const fileTag = d.file ? ' 📎' : '';
+    return `<div class="doc-select-row">
+      <input type="checkbox" id="sendDoc_${d.id}" value="${d.id}" ${checked}>
+      <label for="sendDoc_${d.id}"><strong>${d.type}</strong>${extra}${fileTag}
+        <div class="doc-item-meta">Emisión: ${fmtDate(d.issue)}</div>
+      </label>
+    </div>`;
+  }).join('');
+
+  const hasShareFiles = !!(navigator.canShare && navigator.share);
+  document.getElementById('sendDocsHint').textContent = hasShareFiles
+    ? 'En este dispositivo se adjuntarán los archivos escaneados directamente en WhatsApp.'
+    : 'En este dispositivo se enviará un mensaje de texto con el detalle. Los archivos escaneados se abrirán aparte para que los adjuntes manualmente.';
+
+  openModal('sendDocsModal');
+}
+
+function toggleAllSendDocs(check){
+  document.querySelectorAll('#sendDocsList input[type=checkbox]').forEach(cb=>cb.checked=check);
+}
+
+function getSelectedSendDocs(){
+  return [...document.querySelectorAll('#sendDocsList input[type=checkbox]:checked')].map(cb=>cb.value);
+}
+
+/* Convierte data:URL (base64) a File para navigator.share */
+function dataURLtoFile(dataUrl, filename, mime){
+  const arr = dataUrl.split(',');
+  const bstr = atob(arr[1]);
+  const u8 = new Uint8Array(bstr.length);
+  for(let i=0;i<bstr.length;i++) u8[i] = bstr.charCodeAt(i);
+  return new File([u8], filename, {type: mime || (arr[0].match(/:(.*?);/)||[])[1] || 'application/octet-stream'});
+}
+
+function buildDocsMessage(unit, docs, contactName){
+  let txt = `🚛 *DOCUMENTOS - ${unit.plate}*\n`;
+  if(unit.brand||unit.model) txt += `${[unit.brand,unit.model].filter(Boolean).join(' ')}\n`;
+  txt += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+  docs.forEach((d,i)=>{
+    txt += `${i+1}. *${d.type}*\n`;
+    txt += `   Emisión: ${fmtDate(d.issue)}\n`;
+    if(d.expiry){
+      const s = dateStatus(d.expiry);
+      const estado = s.level==='ok'?'✅ Vigente':(s.level==='warn'?'⚠ Próx. a vencer':'❌ Vencido');
+      txt += `   Vence: ${fmtDate(d.expiry)} (${estado} - ${s.text})\n`;
+    }
+    if(d.notes) txt += `   📝 ${d.notes}\n`;
+    txt += `\n`;
+  });
+  txt += `━━━━━━━━━━━━━━━━━━━━\n`;
+  txt += `📅 Generado: ${fmtDate(today())}\nFlotaControl`;
+  return txt;
+}
+
+async function confirmSendDocsWhatsApp(){
+  const contactId = document.getElementById('sendDocsContact').value;
+  if(!contactId){ alert('Selecciona un contacto destinatario.'); return; }
+  const contact = db.contacts.find(c=>c.id===contactId);
+  if(!contact){ alert('Contacto no encontrado.'); return; }
+  const selectedIds = getSelectedSendDocs();
+  if(!selectedIds.length){ alert('Selecciona al menos un documento para enviar.'); return; }
+
+  const unit = getUnit(sendDocsUnitId);
+  const docsToSend = db.docs.filter(d=>selectedIds.includes(d.id));
+  const message = buildDocsMessage(unit, docsToSend, contact.name);
+  // Normalizar número: dejar solo dígitos (wa.me admite formato internacional sin +)
+  const phoneDigits = (contact.phone||'').replace(/[^0-9]/g,'');
+
+  // Intento 1: Web Share API con archivos (móvil moderno)
+  const files = [];
+  for(const d of docsToSend){
+    if(d.file && d.fileName){
+      try{ files.push(dataURLtoFile(d.file, d.fileName, d.fileType)); }catch(e){ /* ignora */ }
+    }
+  }
+  if(files.length && navigator.canShare && navigator.canShare({files})){
+    try{
+      await navigator.share({files, text: message, title: `Documentos ${unit.plate}`});
+      closeModal('sendDocsModal');
+      return;
+    } catch(err){
+      // Usuario canceló o falló: caer al fallback wa.me
+      if(err && err.name === 'AbortError'){ return; }
+    }
+  }
+
+  // Fallback: abrir wa.me con el mensaje al contacto elegido
+  const waUrl = `https://wa.me/${phoneDigits}?text=${encodeURIComponent(message)}`;
+  window.open(waUrl, '_blank');
+
+  // Si hay archivos adjuntos, abrirlos en pestañas nuevas para que el usuario los descargue/adjunte
+  const withFiles = docsToSend.filter(d=>d.file);
+  if(withFiles.length){
+    setTimeout(()=>{
+      alert(`Se abrió WhatsApp con el mensaje.\n\nA continuación se abrirán ${withFiles.length} archivo(s) en pestañas nuevas para que los adjuntes manualmente al chat.`);
+      withFiles.forEach(d=>{
+        const w = window.open();
+        if(!w) return;
+        if(d.fileType && d.fileType.startsWith('image/')){
+          w.document.write(`<html><head><title>${d.fileName}</title></head>
+            <body style="margin:0;background:#222;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;color:#fff;font-family:Arial">
+            <p style="padding:10px">${d.type} - ${unit.plate}</p>
+            <img src="${d.file}" style="max-width:100%;max-height:80vh">
+            <a href="${d.file}" download="${d.fileName}" style="margin-top:12px;background:#25D366;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none">⬇ Descargar</a>
+            </body></html>`);
+        } else {
+          w.location.href = d.file;
+        }
+      });
+    }, 400);
+  }
+  closeModal('sendDocsModal');
+}
+
 /* ============================================================
    SUPABASE - SINCRONIZACIÓN EN LA NUBE (MODO SEGURO)
    - Supabase actúa como punto central.
@@ -1855,7 +2347,7 @@ async function syncToCloud(){
   setCloudDot('syncing');
 
   try {
-    const entities = ['units','maintenance','tires','docs'];
+    const entities = ['units','maintenance','tires','docs','contacts'];
     for(const entity of entities){
       const local = db[entity] || [];
       if(!local.length) continue; // un dispositivo vacío no toca la nube
@@ -1900,6 +2392,7 @@ function applyCloudData(data){
   db.maintenance = data.filter(r=>r.entity==='maintenance').map(r=>r.data);
   db.tires       = data.filter(r=>r.entity==='tires').map(r=>r.data);
   db.docs        = data.filter(r=>r.entity==='docs').map(r=>r.data);
+  db.contacts    = data.filter(r=>r.entity==='contacts').map(r=>r.data);
 
   localStorage.setItem(STORE_KEY, JSON.stringify(db));
   renderAll();
